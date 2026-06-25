@@ -397,7 +397,7 @@
           meaning:
             "Copied Network request details from POST /backend-api/f/conversation.",
           recommended:
-            "Paste the full Chrome Headers + Payload or Safari request summary.",
+            "Paste Chrome/Safari Headers + Payload, Safari Request Data, or full Copy as cURL output with all -H headers and --data-raw.",
           gotcha:
             "Do not commit capture files; they contain session cookies/tokens.",
         },
@@ -3207,8 +3207,9 @@
             </div>
             <p class="mb-4 text-sm text-slate-400">
               If an account breaks, paste a fresh conversation request from
-              ChatGPT Network and save over the same account name. That updates
-              the existing local capture; it does not create a second account.
+              ChatGPT Network and save over the same account name. You can paste
+              Headers/Payload text or full Copy as cURL output. That updates the
+              existing local capture; it does not create a second account.
               Delete only removes local files in this project.
             </p>
             <AccountList
@@ -3225,13 +3226,14 @@
           >
             <PanelTitle kicker="capture" title="Add new account" />
             <p class="mt-2 text-sm text-slate-400">
-              Supports Safari copied request summaries and Chrome DevTools
-              Headers/Payload details. Paste a complete
+              Supports Safari copied request summaries, Chrome DevTools
+              Headers/Payload details, and Copy as cURL output. Paste one complete
               <span class="font-mono text-slate-200"
                 >POST /backend-api/f/conversation</span
               >
-              request from the new ChatGPT account. Save is refused until the required
-              and recommended checks pass.
+              request from the new ChatGPT account at a time. A valid capture
+              must include URL, Authorization, Cookie, and the request JSON body.
+              Save is refused until the required and recommended checks pass.
             </p>
             <div
               class="mt-4 rounded-3xl border border-sky-300/20 bg-sky-300/[0.06] p-4"
@@ -3957,7 +3959,7 @@
               title="What to check when it breaks"
             />
             <div class="mt-4 grid gap-3 md:grid-cols-2">
-              {#each [["401 unauthorized", "Bearer key does not match the running API server. Check the key in Launch or use the default local-dev-key."], ["request body must be JSON", "The copied curl command lost a trailing backslash or Content-Type header. Copy the generated block again."], ["Chat hangs before any text", "Refresh token/prepare may be slow. The bridge now fails token refresh within 30 seconds instead of hanging for Deep Research timeout."], ["Account expired", "Open Accounts, click Update capture on that account, paste a fresh POST /backend-api/f/conversation request, then Save account."], ["Image is listed but file missing", "Library now hides and prunes stale DB records. A visible item must have exists=true and a real download link."], ["LAN client cannot download files", "Set Public base URL to the machine's LAN address, not 127.0.0.1, before starting the API server."]] as row (row[0])}
+              {#each [["401 unauthorized", "Bearer key does not match the running API server. Check the key in Launch or use the default local-dev-key."], ["missing=url,authorization,cookie", "The capture paste is incomplete. For cURL, paste the whole command including the ChatGPT URL, -H Authorization, -H Cookie, and --data-raw JSON."], ["request body must be JSON", "The copied local curl command lost a trailing backslash or Content-Type header. Copy the generated block again."], ["Chat hangs before any text", "Refresh token/prepare may be slow. The bridge now fails token refresh within 30 seconds instead of hanging for Deep Research timeout."], ["Account expired", "Open Accounts, click Update capture on that account, paste a fresh POST /backend-api/f/conversation request, then Save account."], ["Image is listed but file missing", "Library now hides and prunes stale DB records. A visible item must have exists=true and a real download link."], ["LAN client cannot download files", "Set Public base URL to the machine's LAN address, not 127.0.0.1, before starting the API server."]] as row (row[0])}
                 <div class="rounded-2xl border border-white/10 bg-black/20 p-4">
                   <div class="font-black text-slate-100">{row[0]}</div>
                   <p class="mt-2 text-sm text-slate-400">{row[1]}</p>
@@ -4487,8 +4489,9 @@
             />
             <p>
               Paste a fresh request from the same account when cookies, token,
-              sentinel, or conduit values expire. The local account name stays
-              the same.
+              sentinel, or conduit values expire. Headers/Payload text and full
+              Copy as cURL output are both accepted. The local account name
+              stays the same.
             </p>
           </div>
           <button onclick={closeCaptureModal}>Close</button>

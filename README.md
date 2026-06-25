@@ -360,7 +360,8 @@ Console flow:
 1. Open `http://127.0.0.1:8080`.
 2. Go to Accounts.
 3. Choose Add account.
-4. Paste the copied ChatGPT request headers plus payload/request data.
+4. Paste copied ChatGPT headers plus payload/request data, or paste full
+   `Copy as cURL` output.
 5. Save. The Console inspects required fields first and then live-verifies the
    account before routing it.
 
@@ -455,9 +456,12 @@ Recommended routine:
 6. Go to Network.
 7. Send a small message such as `hello`.
 8. Find the request to `https://chatgpt.com/backend-api/f/conversation`.
-9. Copy all request headers.
-10. Copy the full JSON payload or Safari `Request Data`.
-11. Paste both into the console account modal or save them to a local text file.
+9. Copy the request in one of these supported formats:
+   - Chrome/Safari headers plus the full JSON payload or Safari `Request Data`.
+   - Chrome/Safari `Copy as cURL` output, including every `-H ...` header and
+     the `--data-raw ...` JSON body.
+10. Paste the capture into the console account modal or save it to a local text
+    file.
 
 Account names must be ASCII slugs:
 
@@ -519,7 +523,8 @@ python3 -m chatgpt_api admin account add --paste \
   --api-key local-dev-key
 ```
 
-The CLI accepts pasted headers plus payload until a line containing only:
+The CLI accepts pasted headers plus payload, or a full `Copy as cURL` command,
+until a line containing only:
 
 ```text
 END_CAPTURE

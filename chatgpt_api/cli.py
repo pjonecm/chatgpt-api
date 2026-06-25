@@ -816,7 +816,8 @@ def _prompt_capture_text(*, default_mode: str = "paste") -> str:
             print(f"file not found: {path}")
     print()
     print(_headline("Paste ChatGPT Request Capture"))
-    print("Paste all request headers plus Chrome Payload or Safari Request Data.")
+    print("Paste one Chrome/Safari request: headers plus payload, or Copy as cURL output.")
+    print("Do not paste multiple accounts or multiple cURL commands in one save.")
     print("Nothing is saved until required fields pass inspection.")
     print("Finish with a line containing only END_CAPTURE.")
     lines: list[str] = []
@@ -881,7 +882,7 @@ def _print_control_menu(args: argparse.Namespace) -> None:
         [
             ("6", "List accounts", "saved aliases and capture paths"),
             ("7", "Verify accounts", "live-check one account or all"),
-            ("8", "Add account", "paste Safari/Chrome capture; validates before save"),
+            ("8", "Add account", "paste headers/payload or cURL; validates before save"),
             ("9", "Update account", "refresh an expired capture"),
             ("10", "Delete account", "remove capture/settings after confirmation"),
         ],

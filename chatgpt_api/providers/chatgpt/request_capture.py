@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import re
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -45,7 +46,8 @@ class CapturedRequest:
     @classmethod
     def from_text(cls, text: str) -> "CapturedRequest":
         capture = cls()
-        capture.url = _find_summary_value(text, "URL")
+        curl_capture = _parse_curl_capture(text)
+        capture.url = _find_summary_value(text, "URL") or curl_capture.url
         status_text = _find_summary_value(text, "Status")
         if status_text:
             match = re.search(r"\d+", status_text)
@@ -53,12 +55,13 @@ class CapturedRequest:
                 capture.status = int(match.group(0))
 
         capture.headers = _parse_headers(text)
+        capture.headers.update(curl_capture.headers)
         cookie_header = capture.headers.get("cookie")
         if cookie_header:
             capture.cookies = parse_cookie_header(cookie_header)
         _apply_response_cookie_updates(capture, text)
 
-        request_data = _extract_request_data(text)
+        request_data = _extract_request_data(text) or curl_capture.request_data
         if request_data:
             try:
                 parsed = json.loads(request_data)
@@ -73,6 +76,142 @@ class CapturedRequest:
             name: ("<redacted>" if name in SECRET_HEADER_NAMES else value)
             for name, value in self.headers.items()
         }
+
+
+@dataclass(slots=True)
+class _CurlCapture:
+    url: str | None = None
+    headers: dict[str, str] = field(default_factory=dict)
+    request_data: str | None = None
+
+
+def _parse_curl_capture(text: str) -> _CurlCapture:
+    if not re.search(r"(^|\n)\s*(?:\$+\s*)?curl(?:\s|$)", text):
+        return _CurlCapture()
+
+    normalized_text = re.sub(r"\\\r?\n", " ", text.strip())
+    # Chrome may emit bash ANSI-C strings. For our JSON/header extraction the
+    # regular quoted-string behavior is sufficient and is understood by shlex.
+    normalized_text = normalized_text.replace("$'", "'")
+    try:
+        tokens = shlex.split(normalized_text, posix=True)
+    except ValueError:
+        return _CurlCapture()
+
+    curl_idx = next((idx for idx, token in enumerate(tokens) if token == "curl" or token.endswith("/curl")), -1)
+    if curl_idx == -1:
+        return _CurlCapture()
+
+    capture = _CurlCapture()
+    value_options = {
+        "--connect-timeout",
+        "--interface",
+        "--limit-rate",
+        "--max-time",
+        "--output",
+        "--proxy",
+        "--request",
+        "--request-target",
+        "--retry",
+        "--user",
+        "--user-agent",
+        "-A",
+        "-e",
+        "-o",
+        "-u",
+        "-X",
+        "-x",
+    }
+    idx = curl_idx + 1
+    while idx < len(tokens):
+        token = tokens[idx]
+
+        if token in {"-H", "--header"}:
+            value, idx = _next_curl_value(tokens, idx)
+            _apply_curl_header(capture.headers, value)
+            continue
+        if token.startswith("--header="):
+            _apply_curl_header(capture.headers, token.split("=", 1)[1])
+            idx += 1
+            continue
+        if token.startswith("-H") and token != "-H":
+            _apply_curl_header(capture.headers, token[2:])
+            idx += 1
+            continue
+
+        if token in {"-b", "--cookie"}:
+            value, idx = _next_curl_value(tokens, idx)
+            if value:
+                _apply_curl_header(capture.headers, f"cookie: {value}")
+            continue
+        if token.startswith("--cookie="):
+            _apply_curl_header(capture.headers, f"cookie: {token.split('=', 1)[1]}")
+            idx += 1
+            continue
+
+        if token in {"--data", "--data-raw", "--data-binary", "--data-ascii", "-d"}:
+            value, idx = _next_curl_value(tokens, idx)
+            if value:
+                capture.request_data = value
+            continue
+        data_prefix = next(
+            (
+                prefix
+                for prefix in ("--data=", "--data-raw=", "--data-binary=", "--data-ascii=")
+                if token.startswith(prefix)
+            ),
+            None,
+        )
+        if data_prefix:
+            capture.request_data = token[len(data_prefix) :]
+            idx += 1
+            continue
+        if token.startswith("-d") and token != "-d":
+            capture.request_data = token[2:]
+            idx += 1
+            continue
+
+        if token == "--url":
+            value, idx = _next_curl_value(tokens, idx)
+            if value and not capture.url:
+                capture.url = value
+            continue
+        if token.startswith("--url="):
+            if not capture.url:
+                capture.url = token.split("=", 1)[1]
+            idx += 1
+            continue
+
+        if token in value_options:
+            _, idx = _next_curl_value(tokens, idx)
+            continue
+        if token.startswith("-"):
+            idx += 1
+            continue
+        if not capture.url and token.startswith(("http://", "https://")):
+            capture.url = token
+        idx += 1
+
+    return capture
+
+
+def _next_curl_value(tokens: list[str], idx: int) -> tuple[str | None, int]:
+    next_idx = idx + 1
+    if next_idx >= len(tokens):
+        return None, next_idx
+    return tokens[next_idx], next_idx + 1
+
+
+def _apply_curl_header(headers: dict[str, str], raw_header: str | None) -> None:
+    if not raw_header or ":" not in raw_header:
+        return
+    name, value = raw_header.split(":", 1)
+    normalized = name.strip().lower()
+    if not _looks_like_header_name(normalized):
+        return
+    if not _is_replayable_request_header(normalized):
+        return
+    headers[normalized] = value.strip()
 
 
 def _find_summary_value(text: str, key: str) -> str | None:

@@ -196,6 +196,41 @@ Request Data: {"action":"next","model":"auto"}
     assert decrypt_text(on_disk, load_secrets_key(tmp_path / "accounts")) == capture_text
 
 
+def test_admin_save_capture_accepts_copy_as_curl_capture(tmp_path):
+    capture_text = r"""curl 'https://chatgpt.com/backend-api/f/conversation' \
+-X 'POST' \
+-H 'Authorization: Bearer curl-token' \
+-H 'Cookie: oai-did=device-1; __Secure-next-auth.session-token.0=session-1' \
+-H 'Content-Type: application/json' \
+-H 'Accept: text/event-stream' \
+-H 'OpenAI-Sentinel-Chat-Requirements-Token: req-token' \
+-H 'OpenAI-Sentinel-Proof-Token: proof-token' \
+-H 'OpenAI-Sentinel-Turnstile-Token: turnstile-token' \
+-H 'x-conduit-token: conduit-token' \
+-H 'OAI-Device-Id: device-1' \
+-H 'OAI-Session-Id: session-1' \
+--data-raw '{"action":"next","messages":[{"author":{"role":"user"},"content":{"content_type":"text","parts":["hello"]}}],"parent_message_id":"client-created-root","model":"auto","client_prepare_state":"success"}'"""
+    config = OpenAICompatConfig(
+        account="pro",
+        accounts_dir=tmp_path / "accounts",
+        admin_db_path=tmp_path / "admin.sqlite",
+    )
+
+    status, payload = compat._save_account_capture_payload(
+        config,
+        {"account": "pro", "capture_text": capture_text},
+    )
+
+    assert status == 200
+    assert payload["saved"] is True
+    assert payload["inspection"]["ok"] is True
+    assert payload["inspection"]["missing"] == []
+    assert payload["inspection"]["warnings"] == []
+    on_disk = (tmp_path / "accounts" / "pro" / "chatgpt-request.txt").read_text(encoding="utf-8")
+    assert is_encrypted(on_disk)
+    assert decrypt_text(on_disk, load_secrets_key(tmp_path / "accounts")) == capture_text
+
+
 def test_admin_save_capture_allows_prepare_capture_without_request_json(tmp_path):
     capture_text = """
 Request URL

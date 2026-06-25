@@ -163,7 +163,8 @@ python3 -m chatgpt_api admin account add --paste \
 ```
 
 The CLI will ask for the account name and then accept pasted headers plus
-payload until a line containing only `END_CAPTURE`.
+payload, or a full `Copy as cURL` command, until a line containing only
+`END_CAPTURE`.
 
 Update an existing account after tokens/cookies expire:
 

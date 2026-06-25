@@ -323,7 +323,7 @@ Recommended flow:
 8. Send any small message.
 9. Search for `conversation`.
 10. Select `https://chatgpt.com/backend-api/f/conversation`.
-11. Copy headers and payload/request data.
+11. Copy headers and payload/request data, or use `Copy as cURL`.
 12. Save through the console or CLI.
 
 Safari-specific:
@@ -334,8 +334,9 @@ Safari-specific:
 
 Chrome-specific:
 
-- copy the Headers tab
-- copy the Payload tab
+- preferred: right-click the request and use `Copy as cURL`
+- the pasted cURL must include URL, Authorization, Cookie, and `--data-raw`
+- alternative: copy the Headers tab and Payload tab together
 
 Captures often last around 10 days, but this is not guaranteed. Refresh
 important accounts once per week so demos and long background jobs do not stop
