@@ -87,6 +87,12 @@ def load_secrets_key(accounts_dir: Path) -> bytes:
     return _get_or_create_key_file(accounts_dir)
 
 
+def load_auto_secrets_key(accounts_dir: Path) -> bytes:
+    """Return the auto-generated key-file key, ignoring passphrase sources."""
+
+    return _get_or_create_key_file(accounts_dir)
+
+
 def _derive_key_from_passphrase(passphrase: str, salt: bytes) -> bytes:
     kdf = PBKDF2HMAC(algorithm=hashes.SHA256(), length=32, salt=salt, iterations=_PBKDF2_ITERATIONS)
     return base64.urlsafe_b64encode(kdf.derive(passphrase.encode("utf-8")))
@@ -137,3 +143,19 @@ def reencrypt_file(path: Path, old_key: bytes, new_key: bytes) -> bool:
     plaintext = decrypt_text(text, old_key)
     path.write_text(encrypt_text(plaintext, new_key), encoding="utf-8")
     return True
+
+
+def encrypt_or_reencrypt_file(path: Path, old_key: bytes, new_key: bytes) -> str | None:
+    """Encrypt plaintext captures or re-encrypt encrypted captures.
+
+    Returns ``"encrypted"`` for legacy plaintext files, ``"rotated"`` for
+    already encrypted files, or ``None`` when the capture file is missing.
+    """
+
+    if not path.exists():
+        return None
+    text = path.read_text(encoding="utf-8")
+    already_encrypted = is_encrypted(text)
+    plaintext = decrypt_text(text, old_key) if already_encrypted else text
+    path.write_text(encrypt_text(plaintext, new_key), encoding="utf-8")
+    return "rotated" if already_encrypted else "encrypted"

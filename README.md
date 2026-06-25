@@ -1415,9 +1415,12 @@ MIT. See [LICENSE](LICENSE).
   ```
   to move from the auto key file to a passphrase (this also deletes the old
   key file once every capture is confirmed re-encrypted), or omit
-  `--to-passphrase-prompt` to rotate onto a fresh auto-generated key file.
+  `--to-passphrase-prompt` to encrypt legacy plaintext captures or rotate onto
+  a fresh auto-generated key file.
   Add `--from-passphrase-prompt` if the captures are currently encrypted with
-  a passphrase that is not in `CHATGPT_SECRETS_PASSPHRASE`.
+  a passphrase that is not in `CHATGPT_SECRETS_PASSPHRASE`. If you rotate back
+  to auto key-file mode, unset `CHATGPT_SECRETS_PASSPHRASE` before starting the
+  server; environment passphrases intentionally take priority at runtime.
 
 ## Troubleshooting
 

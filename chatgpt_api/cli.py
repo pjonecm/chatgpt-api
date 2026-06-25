@@ -35,9 +35,10 @@ from chatgpt_api.providers.chatgpt.accounts import (
 from chatgpt_api.providers.chatgpt.auth import ChatGPTAuthConfig
 from chatgpt_api.providers.chatgpt.crypto import (
     clear_runtime_passphrase,
+    encrypt_or_reencrypt_file,
     key_file_path,
+    load_auto_secrets_key,
     load_secrets_key,
-    reencrypt_file,
     set_runtime_passphrase,
 )
 from chatgpt_api.providers.chatgpt.models import parse_model_picker
@@ -1016,7 +1017,7 @@ def _press_enter() -> None:
 async def cmd_server_command(args: argparse.Namespace) -> int:
     if args.preset == "docker":
         print("docker compose up --build")
-        print("docker run --rm -p 8000:8000 --env-file .env -v \"$PWD/secrets/accounts:/data/secrets/accounts:ro\" -v \"$PWD/outputs:/data/outputs\" chatgpt-api:local")
+        print("docker run --rm -p 8000:8000 --env-file .env -v \"$PWD/secrets/accounts:/data/secrets/accounts\" -v \"$PWD/outputs:/data/outputs\" chatgpt-api:local")
         return 0
     if args.preset == "lan":
         print(
@@ -1088,15 +1089,16 @@ async def cmd_secrets_rotate(args: argparse.Namespace) -> int:
         key_path = key_file_path(accounts_dir)
         if key_path.exists():
             key_path.unlink()
-        new_key = load_secrets_key(accounts_dir)
+        new_key = load_auto_secrets_key(accounts_dir)
+        if os.environ.get("CHATGPT_SECRETS_PASSPHRASE", "").strip():
+            print("warning: unset CHATGPT_SECRETS_PASSPHRASE before starting the server in auto key-file mode")
 
     rotated = 0
     for profile in profiles:
-        if reencrypt_file(profile.capture_path, old_key, new_key):
+        result = encrypt_or_reencrypt_file(profile.capture_path, old_key, new_key)
+        if result:
             rotated += 1
-            print(f"{profile.name}: rotated")
-        elif profile.exists:
-            print(f"{profile.name}: skipped (capture is plaintext; update it once to encrypt)")
+            print(f"{profile.name}: {result}")
         else:
             print(f"{profile.name}: skipped (no capture file)")
     print(f"rotated {rotated} of {len(profiles)} account capture(s)")

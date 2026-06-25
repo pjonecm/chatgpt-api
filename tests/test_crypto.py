@@ -6,9 +6,11 @@ from cryptography.fernet import Fernet
 from chatgpt_api.providers.chatgpt.crypto import (
     clear_runtime_passphrase,
     decrypt_text,
+    encrypt_or_reencrypt_file,
     encrypt_text,
     is_encrypted,
     key_file_path,
+    load_auto_secrets_key,
     load_secrets_key,
     reencrypt_file,
     set_runtime_passphrase,
@@ -113,6 +115,28 @@ def test_reencrypt_file_is_noop_for_missing_or_plaintext(tmp_path):
     plaintext.write_text("not encrypted", encoding="utf-8")
     assert reencrypt_file(plaintext, b"a", b"b") is False
     assert plaintext.read_text(encoding="utf-8") == "not encrypted"
+
+
+def test_encrypt_or_reencrypt_file_encrypts_legacy_plaintext(tmp_path):
+    capture_path = tmp_path / "chatgpt-request.txt"
+    new_key = load_secrets_key(tmp_path / "new")
+    capture_path.write_text("legacy secret", encoding="utf-8")
+
+    assert encrypt_or_reencrypt_file(capture_path, b"unused-old-key", new_key) == "encrypted"
+    on_disk = capture_path.read_text(encoding="utf-8")
+    assert is_encrypted(on_disk)
+    assert decrypt_text(on_disk, new_key) == "legacy secret"
+
+
+def test_load_auto_secrets_key_ignores_env_passphrase(tmp_path, monkeypatch):
+    accounts_dir = tmp_path / "accounts"
+    monkeypatch.setenv("CHATGPT_SECRETS_PASSPHRASE", "env-passphrase")
+
+    env_key = load_secrets_key(accounts_dir)
+    auto_key = load_auto_secrets_key(accounts_dir)
+
+    assert auto_key != env_key
+    assert key_file_path(accounts_dir).exists()
 
 
 def test_key_file_path_matches_what_load_secrets_key_creates(tmp_path):
