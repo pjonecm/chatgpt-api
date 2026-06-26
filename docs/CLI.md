@@ -56,8 +56,8 @@ Example JSON shape:
 ## Start The API
 
 `--account` and `--accounts` take local account names. Those names are aliases
-you choose when saving captures, for example `free`, `go`, `plus-main`,
-`pro-main`, or `work-pro`. They are not automatic plan selectors.
+you choose when saving captures, for example `main-free`, `image-pro`,
+`research-pro`, or `work_pro`. They are not automatic plan selectors.
 
 If you omit `--accounts`, the server auto-discovers every saved capture under
 `secrets/accounts/*`. Add `--accounts` only when you want to pin a clean pool,
@@ -136,9 +136,9 @@ client, Docker container, opencode adapter, or game frontend will call.
 
 These commands go through the running API server, so they use the server's
 account router, model aliases, concurrency limits, artifact store, download
-URLs, and operation cancellation. This is different from the older direct
-provider commands such as `chatgpt-api chat` and `chatgpt-api image`, which
-read a local account capture directly and are best treated as low-level probes.
+URLs, and operation cancellation. This is different from low-level direct
+provider probe commands such as `chatgpt-api chat` and `chatgpt-api image`,
+which read a local account capture directly.
 
 Every `api` command accepts:
 
@@ -151,8 +151,8 @@ Every `api` command accepts:
 Commands that send provider work also accept route overrides:
 
 ```text
---account plus-main
---accounts free,go,plus-main,pro-main
+--account image-pro
+--accounts main-free,image-pro
 --account-strategy auto|sticky|failover|random|round-robin|weighted|quota-aware
 ```
 
@@ -177,7 +177,7 @@ Chat through the router:
 python3 -m chatgpt_api api chat \
   --message "Reply with exactly: bridge ok" \
   --model auto \
-  --accounts free,go,plus-main,pro-main \
+  --accounts main-free,image-pro \
   --account-strategy random \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
@@ -294,7 +294,7 @@ then live-checks the account after saving.
 
 ```sh
 python3 -m chatgpt_api admin account add \
-  --account pro-main \
+  --account main-free \
   --capture-file ./chatgpt-request.txt \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
@@ -326,7 +326,7 @@ Update an existing account after tokens/cookies expire:
 
 ```sh
 python3 -m chatgpt_api admin account update \
-  --account pro-main \
+  --account main-free \
   --capture-file ./chatgpt-request.txt \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
@@ -335,14 +335,14 @@ python3 -m chatgpt_api admin account update \
 `save-capture` remains as an alias-style command and uses the same validation
 and live-verify flow.
 
-Account names should be ASCII slugs such as `free-main`, `pro-main`,
+Account names should be ASCII slugs such as `main-free`, `image-pro`,
 `free-2`, or `team-main`.
 
 Delete an account capture and settings:
 
 ```sh
 python3 -m chatgpt_api admin account delete \
-  --account old-free-main \
+  --account old-free \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
 ```
@@ -504,10 +504,10 @@ These do not need the API server:
 
 ```sh
 chatgpt-api accounts
-chatgpt-api inspect-capture --account pro-main
-chatgpt-api account-info --account pro-main
-chatgpt-api account-capabilities --account pro-main
-chatgpt-api account-limits --account pro-main
-chatgpt-api account-models --account pro-main
-chatgpt-api account-check --account pro-main
+chatgpt-api inspect-capture --account main-free
+chatgpt-api account-info --account main-free
+chatgpt-api account-capabilities --account main-free
+chatgpt-api account-limits --account main-free
+chatgpt-api account-models --account main-free
+chatgpt-api account-check --account main-free
 ```

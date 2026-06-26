@@ -33,34 +33,39 @@ headers, cookies, and JSON body, but they are not documented as supported.
 - Refresh important captures weekly. They often last around 10 days, but this is
   not guaranteed.
 - Account names are local aliases. Use ASCII slugs only, for example
-  `free-main`, `pro-main`, `free-2`, or `plus_work`.
+  `main-free`, `image-pro`, `free-2`, or `plus_work`.
 
 ## Quick Path
 
 1. Open `https://chatgpt.com`.
 2. Sign in to the account you want to add.
-3. Open a fresh ChatGPT conversation.
+3. Open a fresh ChatGPT conversation, or use an existing conversation if that
+   is easier. The capture only provides browser credentials and request shape;
+   the bridge does not automatically continue that browser chat later.
 4. Open DevTools or Web Inspector.
 5. Go to Network.
 6. Clear the Network log.
 7. Enable Preserve log.
 8. Send a tiny message such as `hello`.
-9. Search Network for `conversation`.
-10. Select the `POST` request to:
+9. Wait until the assistant response starts or finishes. Copying too early can
+   leave you with only `/conversation/prepare` or an incomplete request.
+10. Search Network for `conversation`.
+11. Select the `POST` request to:
 
    ```text
    https://chatgpt.com/backend-api/f/conversation
    ```
 
-11. Copy that request using one of the browser-specific methods below.
-12. Paste it into the Bridge Console account modal or CLI paste flow.
+12. Copy that request using one of the browser-specific methods below.
+13. Paste it into the Bridge Console account modal or CLI paste flow.
 
 Do not use telemetry requests such as `flush`, `intake`, or `m`. Those are not
 conversation requests and cannot be used as captures.
 
-`/backend-api/f/conversation/prepare` may appear near the real request. The
-normal account capture should be the real `POST /backend-api/f/conversation`
-request because it includes the request payload template the bridge can reuse.
+`/backend-api/f/conversation/prepare` may appear near the real request. Do not
+save it as the normal account capture. The normal account capture should be the
+real `POST /backend-api/f/conversation` request because it includes the request
+payload template the bridge can reuse.
 
 ## Chrome: Copy as cURL
 
@@ -69,7 +74,9 @@ This is now the simplest Chrome path.
 1. Select the `POST /backend-api/f/conversation` request.
 2. Right-click the request row.
 3. Choose `Copy` -> `Copy as cURL` or `Copy as cURL (bash)`.
-4. Paste the full command into the console modal or CLI.
+4. Paste the full command into the console modal or CLI. Do not run the copied
+   cURL command in your terminal; it is source material for the bridge capture
+   parser.
 5. Do not trim the command before saving locally.
 
 Paste only one cURL command for the account you are adding or updating. If you
@@ -207,7 +214,7 @@ either `-H 'Cookie: ...'` or `-b '...'`.
 
 3. Go to Accounts.
 4. Choose Add account or Update capture.
-5. Enter an ASCII account name such as `pro-main`.
+5. Enter an ASCII account name such as `main-free`.
 6. Paste the copied capture.
 7. Click Inspect if you want to see what the parser found.
 8. Save only when validation passes.
@@ -222,7 +229,7 @@ Save from a prepared file:
 
 ```sh
 chatgpt-api admin account add \
-  --account pro-main \
+  --account main-free \
   --capture-file ./chatgpt-request.txt \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
@@ -232,7 +239,7 @@ Paste interactively:
 
 ```sh
 chatgpt-api admin account add --paste \
-  --account pro-main \
+  --account main-free \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
 ```
@@ -247,7 +254,7 @@ Update an existing account after tokens/cookies expire:
 
 ```sh
 chatgpt-api admin account update \
-  --account pro-main \
+  --account main-free \
   --capture-file ./chatgpt-request.txt \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
@@ -266,7 +273,7 @@ Delete an account:
 
 ```sh
 chatgpt-api admin account delete \
-  --account old-free-main \
+  --account old-free \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
 ```

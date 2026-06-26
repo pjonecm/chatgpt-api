@@ -102,17 +102,43 @@ downloads, and developer tooling.
 
 ## Latest Validation Snapshot
 
-These checks were run against the local stack before this release.
+These checks were run locally on 2026-06-26 after the CLI, capture, docs, and
+console updates in this branch.
 
 | Check | Result |
 | --- | --- |
-| Python test suite | `144 passed` |
-| Docker API image build | passed |
-| Docker first run with no account capture | `/health`, `/v1/models`, and capacity work; chat returns a structured `chatgpt_missing_account_capture` error |
-| Multi-image vision request | passed with two input images on a Free account |
-| OCR request | passed on a Free account |
-| Multi-image edit/composite | passed on a Free account and returned a real PNG download URL |
-| Artifact download route | returned a valid PNG file |
+| Python full test suite: `python3 -m pytest -q` | `189 passed` |
+| Bridge Console Svelte diagnostics: `bun run check` | `0 errors, 0 warnings` |
+| Bridge Console production build: `bun run build` | passed |
+| Character Game Svelte diagnostics: `bun run check` | `0 errors, 0 warnings` |
+| Character Game unit tests: `bun run test` | `1 file / 6 tests passed` |
+| Character Game production build: `bun run build` | passed |
+| Svelte MCP autofixer on `App.svelte` | no issues |
+| Docs/console stale-alias sweep | no `free-main`, `pro-main`, `plus-main`, or fake `pro/free` route examples found |
+| Whitespace check: `git diff --check` | passed |
+
+Docker and live ChatGPT account/image/OCR/research proofs require a real local
+account capture and should be rerun on the target machine before publishing a
+release build.
+
+## Recommended Minimum Revision
+
+If you cloned or forked this project before the current CLI/capture/docs
+cleanup, update to this revision before testing Docker, the console, cURL
+capture import, image edit/composite, OCR/vision, or Deep Research cancellation.
+This revision is the recommended baseline because it:
+
+- removes confusing fake plan-account examples such as `free-main`/`pro-main`
+  from the docs and console;
+- documents Chrome/Safari `Copy as cURL` capture import, including `Cookie:` or
+  `-b` cookie input;
+- clarifies that account names are local aliases, not plan selectors;
+- keeps Docker startup separate from real ChatGPT account verification;
+- updates CLI and console docs around routing, artifacts, upload/image usage,
+  and Deep Research cancellation.
+
+Older commits may still run, but they are easier to misconfigure and are not
+the best starting point for new users.
 
 ## Best Fit
 
@@ -142,7 +168,7 @@ Read it in three layers:
 
 | Tier | What belongs here | How to judge it |
 | --- | --- | --- |
-| **Works now** | Local bridge, account capture, account routing, chat, streaming, image generation, image edits/composites, OCR/vision, Deep Research export, artifact downloads, Docker startup, CLI basics, operator console boot. | These are the core proof points. They should run locally and are the main reason this repo exists. |
+| **Works now** | Local bridge, account capture, account routing, chat, streaming, image generation, image edits/composites, OCR/vision, Deep Research export, artifact downloads, Docker startup, the operator CLI, and the console control plane. | These are the core proof points. They should run locally and are the main reason this repo exists. |
 | **Reference only** | Bridge Console UX, Character Game UX, opencode integration, screenshots, example prompts, demo storage views, docs UI, test lab flows. | These show how the API can be used. They are not the final commercial UX and may have rough edges. |
 | **Production TODO** | Strong auth, tenant isolation, account vaulting, secret rotation, CORS policy, durable queues, storage lifecycle, audit logs, abuse controls, observability, backup/restore, deployment hardening. | Add these before turning the idea into a hosted multi-user product. They are known requirements, not forgotten work. |
 
@@ -257,6 +283,10 @@ think this level of solo output is valuable, I am open to employment,
 contracting, and consulting opportunities around AI tooling, local agents,
 automation, full-stack product prototypes, and developer infrastructure.
 
+The public milestone is **100 GitHub stars**. If the project helps you, please
+star the repository so there is a clear signal that this is worth continuing
+after the initial open-source release.
+
 ## Open Source Scope
 
 > [!NOTE]
@@ -353,6 +383,9 @@ curl 'http://127.0.0.1:8000/v1/models' \
   -H 'Authorization: Bearer local-dev-key'
 ```
 
+These two checks only prove the local stack is online. Real ChatGPT chat,
+image, vision, and research calls need at least one saved account capture.
+
 ### Add Your First Account
 
 Console flow:
@@ -425,10 +458,10 @@ python3 -m chatgpt_api server start \
 ```
 
 If you omit `--accounts`, the server auto-discovers saved captures under
-`secrets/accounts/*`. Use `--accounts free,go,plus,pro` only when you want to
+`secrets/accounts/*`. Add `--accounts main-free,image-pro` only when you want to
 pin a clean route pool or skip an old/broken capture. `--account` and
-`--accounts` are local aliases you choose, such as `free`, `go`, `plus-main`,
-`pro-main`, `free-2`, or `work-pro`; they are not automatic plan selectors.
+`--accounts` are local aliases you choose, such as `main-free`, `image-pro`,
+`free-2`, or `work-pro`; they are not automatic plan selectors.
 
 ## Account Capture
 
@@ -451,22 +484,28 @@ Recommended routine:
    profile.
 2. Sign in to the account you want to use.
 3. Do not log out after collecting the capture.
-4. Open a fresh ChatGPT conversation.
+4. Open a fresh ChatGPT conversation, or use an existing conversation if that is
+   easier. The capture is used for credentials/request shape; API calls still
+   carry the message history you send in each request and do not automatically
+   continue that browser chat.
 5. Open DevTools or Web Inspector.
 6. Go to Network.
 7. Send a small message such as `hello`.
-8. Find the request to `https://chatgpt.com/backend-api/f/conversation`.
+8. Wait until the ChatGPT response starts or finishes, then find the request to
+   `https://chatgpt.com/backend-api/f/conversation`. Do not copy a
+   `/conversation/prepare` request or a telemetry request.
 9. Copy the request in one of these supported formats:
    - Chrome/Safari headers plus the full JSON payload or Safari `Request Data`.
    - Chrome/Safari `Copy as cURL` output, including Authorization, cookies
-     through `Cookie:` or `-b`, and the `--data-raw ...` JSON body.
+     through `Cookie:` or `-b`, and the `--data-raw ...` JSON body. Paste this
+     command into the bridge capture field; do not run it against ChatGPT.
 10. Paste the capture into the console account modal or save it to a local text
     file.
 
 Account names must be ASCII slugs:
 
 ```text
-valid:   free-main, pro-main, free_2, team-pro
+valid:   main-free, image-pro, free_2, team-pro
 invalid: บัญชีฟรี, pro main, pro/main
 ```
 
@@ -499,7 +538,7 @@ Through the CLI:
 
 ```sh
 python3 -m chatgpt_api admin account add \
-  --account pro-main \
+  --account main-free \
   --capture-file ./chatgpt-request.txt \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
@@ -509,7 +548,7 @@ Update an expired capture:
 
 ```sh
 python3 -m chatgpt_api admin account update \
-  --account pro-main \
+  --account main-free \
   --capture-file ./chatgpt-request.txt \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
@@ -543,7 +582,7 @@ Delete an account capture and settings:
 
 ```sh
 python3 -m chatgpt_api admin account delete \
-  --account old-free-main \
+  --account old-free \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
 ```
@@ -596,7 +635,7 @@ Example response:
   "object": "chat.completion",
   "created": 1782320100,
   "model": "auto",
-  "chatgpt_account": "free-main",
+  "chatgpt_account": "main-free",
   "choices": [
     {
       "index": 0,
@@ -664,7 +703,7 @@ Example response:
 ```json
 {
   "created": 1782320100,
-  "chatgpt_account": "pro-main",
+  "chatgpt_account": "image-pro",
   "chatgpt_operation_id": "chatgptop_abc",
   "data": [
     {
@@ -808,7 +847,7 @@ Example response:
   "id": "chatcmpl_research",
   "object": "chat.completion",
   "model": "chatgpt-deep-research",
-  "chatgpt_account": "pro-main",
+  "chatgpt_account": "research-pro",
   "choices": [
     {
       "message": {
@@ -1204,7 +1243,8 @@ Start the API:
 ```sh
 python3 -m chatgpt_api server start --interactive
 python3 -m chatgpt_api server start --api-key local-dev-key
-python3 -m chatgpt_api server start --accounts free,go,plus,pro --account-strategy random --api-key local-dev-key
+python3 -m chatgpt_api server start --account-strategy random --api-key local-dev-key
+python3 -m chatgpt_api server start --accounts main-free,image-pro --account-strategy random --api-key local-dev-key
 ```
 
 Start with a passphrase-derived key instead of the auto key file (prompts at
@@ -1227,7 +1267,7 @@ API chat through the running server and router:
 ```sh
 python3 -m chatgpt_api api chat \
   --message "Reply with exactly: bridge ok" \
-  --accounts free,go,plus,pro \
+  --accounts main-free,image-pro \
   --account-strategy random \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key

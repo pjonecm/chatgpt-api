@@ -18,7 +18,7 @@
   const LOCAL_API_PORT = "8000";
   const ACCOUNT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
   const ACCOUNT_NAME_HELP =
-    "Use English letters, numbers, dash, or underscore only. Example: pro-main, free-2, plus_work.";
+    "Use English letters, numbers, dash, or underscore only. Example: main-free, image-pro, plus_work.";
   const PLANS = ["free", "go", "plus", "pro"] as const;
   const FEATURES = [
     ["chat", "Chat", "Total conversation calls per account"],
@@ -186,7 +186,7 @@
           recommended:
             "Use for debug, paid-only workflows, or a user-selected account.",
           gotcha:
-            "This is a local alias like pro-main or free-2, not a ChatGPT plan name.",
+            "This is a local alias like main-free or image-pro, not a ChatGPT plan name.",
         },
         {
           name: "chatgpt_accounts",
@@ -433,7 +433,7 @@
           type: "string",
           defaultValue: "required on account routes",
           meaning:
-            "Local account slug such as free, pro, plus-work, or plus_01.",
+            "Local account slug such as main-free, image-pro, plus-work, or plus_01.",
           recommended:
             "Use English letters, numbers, dash, or underscore only. Save a fresh capture over the same name when tokens expire.",
           gotcha:
@@ -688,7 +688,7 @@
   let baseUrl = $state(DEFAULT_BASE_URL);
   let apiKey = $state(DEFAULT_API_KEY);
 
-  let captureAccount = $state("free");
+  let captureAccount = $state("main-free");
   let captureText = $state("");
   let captureResult = $state<Json | null>(null);
   let captureModalOpen = $state(false);
@@ -753,9 +753,7 @@
     })),
   );
   const accountNames = $derived(
-    Array.from(
-      new Set(["free", "go", "plus", "pro", ...accounts.map((account) => account.account)]),
-    ).filter(Boolean),
+    Array.from(new Set(accounts.map((account) => account.account))).filter(Boolean),
   );
   const selectedServerAccounts = $derived(splitCsv(serverAccounts));
   const chatCurl = $derived(
@@ -1446,15 +1444,15 @@
       serverPort = LOCAL_API_PORT;
       serverPublicBase = `http://${LOCAL_API_HOST}:${LOCAL_API_PORT}/v1`;
       serverStrategy = "quota-aware";
-      serverAccounts = "pro";
-      serverAccount = "pro";
+      serverAccounts = "";
+      serverAccount = "";
     } else {
       serverHost = LOCAL_API_HOST;
       serverPort = LOCAL_API_PORT;
       serverPublicBase = `http://${LOCAL_API_HOST}:${LOCAL_API_PORT}/v1`;
       serverStrategy = "sticky";
-      serverAccounts = "free";
-      serverAccount = "free";
+      serverAccounts = "";
+      serverAccount = "";
       modelFallback = "auto";
     }
     showToast(`Applied ${preset} preset`);
@@ -1476,15 +1474,15 @@
       },
       {
         id: "pro",
-        title: "Pro only",
-        body: "Use one paid account for heavier tests without touching free quota.",
-        values: "accounts pro · quota-aware · model fallback auto",
+        title: "Heavier route",
+        body: "Use quota-aware routing with your saved paid accounts. Add account aliases first, then pin them if needed.",
+        values: "accounts auto-discover · quota-aware · model fallback auto",
       },
       {
         id: "free",
-        title: "Free safe mode",
-        body: "Keep the route conservative. Best for checking basic chat only.",
-        values: "accounts free · sticky · auto model",
+        title: "Single-account safe mode",
+        body: "Keep routing conservative. After adding a free/test account, choose it as Primary account if you want sticky routing.",
+        values: "accounts auto-discover · sticky · auto model",
       },
     ] as const;
   }
@@ -1508,7 +1506,7 @@
     const unique = Array.from(new Set(next.filter(Boolean)));
     serverAccounts = unique.join(",");
     if (!unique.includes(serverAccount)) {
-      serverAccount = unique[0] ?? "pro";
+      serverAccount = unique[0] ?? "";
     }
   }
 
@@ -1583,7 +1581,7 @@
               content: "Say which routed account handled this if available.",
             },
           ],
-          chatgpt_accounts: ["free", "go", "plus", "pro"],
+          chatgpt_accounts: ["main-free", "image-pro"],
           chatgpt_account_strategy: "random",
           stream: false,
         }),
@@ -1702,7 +1700,7 @@
         path: "POST /v1/chatgpt/admin/captures/save",
         note: "Validates required and recommended checks first, then writes the local account capture only if every check passes.",
         code: curl("POST", "/chatgpt/admin/captures/save", {
-          account: "pro",
+          account: "main-free",
           capture_text: "PASTE REQUEST CAPTURE HERE",
         }),
       },
@@ -1711,7 +1709,7 @@
         path: "POST /v1/chatgpt/admin/accounts/delete",
         note: "Deletes only local capture/settings metadata for the named account.",
         code: curl("POST", "/chatgpt/admin/accounts/delete", {
-          account: "free",
+          account: "old-free",
           delete_capture: true,
           delete_settings: true,
         }),
@@ -1765,7 +1763,7 @@
         title: "API chat with routing",
         note: "Tests the real app route with per-request accounts and strategy overrides.",
         code: shell(
-          `python3 -m chatgpt_api api chat --message 'Reply with exactly: bridge ok' --accounts free,go,plus,pro --account-strategy random --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api api chat --message 'Reply with exactly: bridge ok' --account-strategy random --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
         ),
       },
       {
@@ -1797,7 +1795,7 @@
         title: "Save account capture",
         note: "Fails before writing if the copied request is incomplete. Use it to refresh an expired account capture safely.",
         code: shell(
-          `python3 -m chatgpt_api admin save-capture --account plus-main --capture-file ./chatgpt-request.txt --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api admin account add --account main-free --capture-file ./chatgpt-request.txt --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
         ),
       },
       {
@@ -1840,7 +1838,7 @@
             id: "chatcmpl_local_example",
             object: "chat.completion",
             model: "auto",
-            chatgpt_account: "pro",
+            chatgpt_account: "main-free",
             choices: [
               {
                 index: 0,
@@ -1864,7 +1862,7 @@
             id: "chatcmpl_local_fallback",
             object: "chat.completion",
             model: "auto",
-            chatgpt_account: "free",
+            chatgpt_account: "main-free",
             chatgpt_requested_model: "gpt-5-5",
             chatgpt_fallback_model: "auto",
             choices: [
@@ -1886,7 +1884,7 @@
         code: JSON.stringify(
           {
             created: 1782320000,
-            chatgpt_account: "pro",
+            chatgpt_account: "image-pro",
             chatgpt_operation_id: "chatgptop_image_example",
             data: [
               {
@@ -1908,7 +1906,7 @@
         code: JSON.stringify(
           {
             created: 1782320100,
-            chatgpt_account: "pro",
+            chatgpt_account: "image-pro",
             chatgpt_operation_id: "chatgptop_edit_example",
             input_image_count: 2,
             aspect_ratio: "1:1",
@@ -1937,7 +1935,7 @@
             id: "chatcmpl_vision_example",
             object: "chatgpt.vision",
             model: "auto",
-            chatgpt_account: "pro",
+            chatgpt_account: "main-free",
             mode: "ocr",
             input_image_count: 1,
             text: JSON.stringify({
@@ -1979,7 +1977,7 @@
             id: "chatcmpl_research_example",
             object: "chat.completion",
             model: "chatgpt-deep-research",
-            chatgpt_account: "pro",
+            chatgpt_account: "research-pro",
             chatgpt_research_report_path:
               "/Users/work/Desktop/chatgpt-api/outputs/chatgpt-research/agi-report.md",
             chatgpt_research_report_download_url: `${fileBase}/chatgpt/files/file_report/agi-report.md`,
@@ -2013,7 +2011,7 @@
           id: "chatcmpl_local",
           object: "chat.completion",
           model: "auto",
-          chatgpt_account: "pro",
+          chatgpt_account: "main-free",
           choices: [{ message: { role: "assistant", content: "..." } }],
         },
       },
@@ -2067,7 +2065,7 @@
         operation: "chatgpt_operation_id in JSON and response header",
         response: {
           created: 1782320000,
-          chatgpt_account: "pro",
+          chatgpt_account: "image-pro",
           chatgpt_operation_id: "chatgptop_image",
           data: [
             {
@@ -2088,7 +2086,7 @@
         operation: "chatgpt_operation_id in JSON and response header",
         response: {
           created: 1782320100,
-          chatgpt_account: "pro",
+          chatgpt_account: "image-pro",
           chatgpt_operation_id: "chatgptop_edit",
           input_image_count: 2,
           aspect_ratio: "1:1",
@@ -2115,7 +2113,7 @@
           id: "chatcmpl_vision",
           object: "chatgpt.vision",
           model: "auto",
-          chatgpt_account: "pro",
+          chatgpt_account: "main-free",
           mode: "describe",
           input_image_count: 1,
           text: "A square app icon with stylized letters. For OCR bbox mode, ask for strict JSON in the prompt.",
@@ -2170,7 +2168,7 @@
           operation: {
             id: "chatgptop_REPLACE_ME",
             kind: "research",
-            account: "pro",
+            account: "research-pro",
             provider_selected: true,
             conversation_id: "conversation-id",
             deep_research_ready: true,
@@ -2209,7 +2207,7 @@
           object: "chatgpt.usage",
           accounts: [
             {
-              account: "pro",
+              account: "image-pro",
               ok: true,
               features: {
                 file_upload: { remaining: 23 },
@@ -2249,7 +2247,7 @@
           object: "chatgpt.admin.status",
           ok: true,
           server: { base_url: baseUrl },
-          routing: { accounts: ["pro", "free"] },
+          routing: { accounts: ["main-free", "image-pro"] },
           storage: { artifact_count: 2 },
         },
       },
@@ -2263,7 +2261,7 @@
           object: "chatgpt.admin.capture",
           ok: true,
           saved: true,
-          account: "pro",
+          account: "main-free",
           checks: [{ name: "authorization", ok: true }],
         },
       },
@@ -2276,7 +2274,7 @@
         response: {
           object: "chatgpt.admin.account.delete",
           ok: true,
-          account: "free",
+          account: "old-free",
           deleted_capture: true,
         },
       },
@@ -4441,9 +4439,9 @@
                     </button>
                     <button
                       class="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-black"
-                      onclick={() => setServerAccounts(["pro"])}
+                      onclick={() => setServerAccounts([])}
                     >
-                      Pro only
+                      Clear
                     </button>
                   </div>
                 </div>

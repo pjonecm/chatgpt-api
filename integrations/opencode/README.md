@@ -8,18 +8,23 @@ first version.
 
 ## Start The Local API
 
-Use the Free account for public-safe testing:
+Start the API with the saved accounts auto-discovered from
+`secrets/accounts/*`:
 
 ```sh
-CHATGPT_API_KEY=local-dev-key chatgpt-api serve --account free-main --port 8000 --agent-mode optimized
+CHATGPT_API_KEY=local-dev-key chatgpt-api serve --port 8000 --agent-mode optimized
 ```
 
 Check the server:
 
 ```sh
 curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/v1/models
+curl -H 'Authorization: Bearer local-dev-key' http://127.0.0.1:8000/v1/models
 ```
+
+If you want to pin one local account alias for testing, use something explicit
+such as `--account main-free`. Account names are aliases you created during
+capture import, not automatic plan names.
 
 ## One-Time opencode Setup
 
@@ -66,7 +71,7 @@ or start the server with `--accounts`:
 
 ```sh
 CHATGPT_API_KEY=local-dev-key chatgpt-api serve \
-  --accounts free-main,pro-main \
+  --accounts main-free,image-pro \
   --account-strategy failover \
   --port 8000 \
   --agent-mode optimized
@@ -170,8 +175,8 @@ opencode   fuller bridge prompt that preserves opencode's long agent context, sk
 Pick per server:
 
 ```sh
-CHATGPT_API_KEY=local-dev-key chatgpt-api serve --account free-main --port 8000 --agent-mode optimized
-CHATGPT_API_KEY=local-dev-key chatgpt-api serve --account pro-main --port 8000 --agent-mode opencode
+CHATGPT_API_KEY=local-dev-key chatgpt-api serve --port 8000 --agent-mode optimized
+CHATGPT_API_KEY=local-dev-key chatgpt-api serve --account image-pro --port 8000 --agent-mode opencode
 ```
 
 Pick per opencode model:
@@ -202,23 +207,26 @@ intentionally want opencode to auto-approve file edits and shell commands.
 
 See `docs/OPENCODE_AGENT_ROADMAP.md` for the public plan. Current behavior:
 
-- Single-account mode: use `--account free-main`.
-- Multi-account mode: use `--accounts free-main,pro-main --account-strategy failover`.
+- Single-account mode: use `--account main-free`.
+- Multi-account mode: use `--accounts main-free,image-pro --account-strategy failover`.
 - Use `chatgpt-web/auto@optimized` when you want ChatGPT Web to fall back like
   the browser after a model limit.
 - Use an explicit model such as `chatgpt-web/gpt-5-5@optimized` when you want
   limit errors to show up clearly in opencode.
 - ChatGPT image generation is available through `/v1/images/generations` and
-  `chatgpt-api image`.
+  `python3 -m chatgpt_api api image`.
 - Image requests are saved to disk. If the user names a path, that path is used;
   otherwise files go under the configured image output directory and the
   assistant response includes the saved path.
 - Image failover avoids retrying another account after ChatGPT appears to have
   completed an image task but the bridge cannot see the asset yet. This prevents
   duplicate generations across accounts.
-- Image upload attachments are not supported.
-- File upload attachments are not supported. Pass local paths in the prompt and
-  let opencode tools read, grep, or inspect those files.
+- The opencode chat adapter does not automatically convert attached local files
+  into bridge image uploads yet. For image generation, image edit, OCR, or
+  multi-image composite work, call the bridge image/vision endpoints or CLI
+  commands directly and pass the produced paths back into opencode.
+- For normal code work, pass local paths in the prompt and let opencode tools
+  read, grep, or inspect those files.
 
 ## Automated Smoke Tests
 

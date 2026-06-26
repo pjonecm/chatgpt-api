@@ -134,7 +134,7 @@ Usage response shape:
   "object": "chatgpt.usage",
   "accounts": [
     {
-      "account": "pro-main",
+      "account": "image-pro",
       "ok": true,
       "plan_bucket": "pro",
       "default_model_slug": "gpt-5-5",
@@ -182,7 +182,7 @@ Response:
   "object": "chat.completion",
   "created": 1782320100,
   "model": "auto",
-  "chatgpt_account": "free-main",
+  "chatgpt_account": "main-free",
   "choices": [
     {
       "index": 0,
@@ -264,7 +264,7 @@ Response:
 ```json
 {
   "created": 1782320100,
-  "chatgpt_account": "pro-main",
+  "chatgpt_account": "image-pro",
   "chatgpt_operation_id": "chatgptop_abc",
   "data": [
     {
@@ -307,7 +307,7 @@ Response:
   "id": "chatcmpl_vision",
   "object": "chatgpt.vision",
   "model": "auto",
-  "chatgpt_account": "pro-main",
+  "chatgpt_account": "main-free",
   "mode": "ocr",
   "input_image_count": 1,
   "text": "FW",
@@ -417,7 +417,7 @@ Response:
 ```json
 {
   "created": 1782320100,
-  "chatgpt_account": "pro-main",
+  "chatgpt_account": "image-pro",
   "chatgpt_operation_id": "chatgptop_edit",
   "input_image_count": 1,
   "aspect_ratio": "1:1",
@@ -487,7 +487,7 @@ Response:
   "id": "chatcmpl_research",
   "object": "chat.completion",
   "model": "chatgpt-deep-research",
-  "chatgpt_account": "pro-main",
+  "chatgpt_account": "research-pro",
   "choices": [
     {
       "message": {
@@ -529,7 +529,7 @@ Response:
   "operation": {
     "id": "chatgptop_abc",
     "kind": "research",
-    "account": "pro",
+    "account": "research-pro",
     "provider_selected": true,
     "conversation_id": "conversation-id",
     "deep_research_ready": true,

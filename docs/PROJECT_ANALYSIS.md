@@ -82,18 +82,18 @@ python3 -m chatgpt_api server command --preset local
 python3 -m chatgpt_api server command --preset local --port 8010 --account-strategy random
 python3 -m chatgpt_api server start --api-key local-dev-key
 python3 -m chatgpt_api admin status --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
-python3 -m chatgpt_api admin account add --account pro-main --capture-file ./chatgpt-request.txt
-chatgpt-api admin account update --account pro-main --capture-file ./chatgpt-request.txt
+python3 -m chatgpt_api admin account add --account main-free --capture-file ./chatgpt-request.txt
+chatgpt-api admin account update --account main-free --capture-file ./chatgpt-request.txt
 chatgpt-api admin account verify --account all
-chatgpt-api admin account delete --account old-free-main
-python3 -m chatgpt_api api chat --message "hello" --accounts free,go,plus-main,pro-main --account-strategy random --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
+chatgpt-api admin account delete --account old-free
+python3 -m chatgpt_api api chat --message "hello" --accounts main-free,image-pro --account-strategy random --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
 python3 -m chatgpt_api api image --prompt "small icon" --output-dir ./outputs/manual-images --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
 python3 -m chatgpt_api api vision --mode ocr --input-image ./panel.png --prompt "Extract text" --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
 ```
 
 `--account` values are local account names chosen by the operator when saving a
-capture. Use names like `free`, `go`, `plus-main`, `pro-main`, `work-pro`, or
-`free-2`. If `--accounts`/`CHATGPT_ACCOUNTS` is omitted, saved captures under
+capture. Use names like `main-free`, `image-pro`, `research-pro`, `work-pro`,
+or `free-2`. If `--accounts`/`CHATGPT_ACCOUNTS` is omitted, saved captures under
 `secrets/accounts/*` are auto-discovered.
 Use `api ...` commands to exercise the real server router, strategy,
 cancellation, and artifact store. Use direct `chat`, `image`, and `vision`
@@ -324,14 +324,18 @@ Recommended flow:
 2. Use private/incognito mode or a dedicated browser profile.
 3. Sign in to the target account.
 4. Do not sign out after collecting the capture.
-5. Open a new ChatGPT conversation.
+5. Open a new or existing ChatGPT conversation. The capture is only used for
+   browser credentials and request shape; API calls do not automatically
+   continue that browser chat later.
 6. Open DevTools or Web Inspector.
 7. Go to Network.
 8. Send any small message.
-9. Search for `conversation`.
-10. Select `https://chatgpt.com/backend-api/f/conversation`.
-11. Copy headers and payload/request data, or use `Copy as cURL`.
-12. Save through the console or CLI.
+9. Wait until the ChatGPT response starts or finishes.
+10. Search for `conversation`.
+11. Select `https://chatgpt.com/backend-api/f/conversation`, not
+    `/backend-api/f/conversation/prepare`.
+12. Copy headers and payload/request data, or use `Copy as cURL`.
+13. Save through the console or CLI.
 
 Safari-specific:
 
@@ -704,10 +708,11 @@ before a polished public release:
    The current script is acceptable as a showcase, but a real public package
    should split prompt presets, config writing, API probes, and terminal UI.
 
-4. More tests should cover image edit and Deep Research behavior.
+4. Keep broadening tests around image edit and Deep Research behavior.
 
-   Existing tests cover route shape and transport well, but long-running
-   provider flows should have more mocked-state tests.
+   Existing tests cover route shape, transport, cancellation, artifacts, and
+   several provider-state paths. Long-running provider flows should continue to
+   gain mocked-state regression tests as the bridge evolves.
 
 5. Console E2E screenshots should become repeatable.
 

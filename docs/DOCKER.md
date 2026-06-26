@@ -13,15 +13,15 @@ Images do not bundle your ChatGPT account captures. Mount them from the host.
 Expected host layout:
 
 ```text
-secrets/accounts/free/chatgpt-request.txt
-secrets/accounts/go/chatgpt-request.txt
-secrets/accounts/plus-main/chatgpt-request.txt
-secrets/accounts/pro-main/chatgpt-request.txt
+secrets/accounts/main-free/chatgpt-request.txt
+secrets/accounts/image-pro/chatgpt-request.txt
+secrets/accounts/research-pro/chatgpt-request.txt
 outputs/
 ```
 
-Use any subset and any ASCII alias you want. `free`, `go`, `plus-main`, and
-`pro-main` are examples, not required names.
+Use any subset and any ASCII alias you want. `main-free`, `image-pro`,
+`research-pro`, and `team_plus` are examples, not required names. Account names
+are local aliases, not automatic plan selectors.
 
 Do not commit `secrets/`. The captures contain live browser credentials.
 
@@ -57,6 +57,10 @@ curl -H 'Authorization: Bearer local-dev-key' http://127.0.0.1:8000/v1/models
 open http://127.0.0.1:8080
 open http://127.0.0.1:3000
 ```
+
+`/health` and `/v1/models` only prove the Docker services are online. Real
+chat, image, vision, and research calls still need at least one valid account
+capture mounted or added through the console/CLI.
 
 ## Run With Docker
 
@@ -97,7 +101,7 @@ deployments where account captures are managed outside the container.
 
 `CHATGPT_ACCOUNTS`
 : Optional comma-separated account names to route, for example
-  `free,go,plus-main,pro-main`. Leave it blank to auto-discover every saved
+  `main-free,image-pro,research-pro`. Leave it blank to auto-discover every saved
   capture under `secrets/accounts/*`. These names are local aliases from
   `secrets/accounts/<name>/`, not automatic plan selectors.
 
@@ -148,7 +152,7 @@ python3 -m chatgpt_api admin capacity --base-url http://127.0.0.1:8000/v1 --api-
 python3 -m chatgpt_api admin models --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
 python3 -m chatgpt_api api health --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
 python3 -m chatgpt_api api chat --message "Reply with exactly: docker bridge ok" --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
-python3 -m chatgpt_api api chat --message "Reply with exactly: pinned route ok" --accounts free,go,plus-main,pro-main --account-strategy random --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
+python3 -m chatgpt_api api chat --message "Reply with exactly: pinned route ok" --accounts main-free,image-pro --account-strategy random --base-url http://127.0.0.1:8000/v1 --api-key local-dev-key
 ```
 
 From inside the container:
@@ -160,15 +164,20 @@ docker compose exec chatgpt-api python3 -m chatgpt_api api health --base-url htt
 
 ## Account Management
 
-Add or update an account through the running Docker API:
+Add or update an account through the console at `http://127.0.0.1:8080`, or
+paste a capture through the running Docker API:
 
 ```sh
-docker compose exec chatgpt-api chatgpt-api admin account update \
-  --account pro-main \
-  --capture-file /data/secrets/accounts/pro-main/chatgpt-request.txt \
+docker compose exec -it chatgpt-api chatgpt-api admin account add \
+  --account main-free \
+  --paste \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
 ```
+
+Paste the full copied Network request or cURL capture, then finish with a line
+containing only `END_CAPTURE`. The command writes the capture into the mounted
+`/data/secrets/accounts/<account>/` directory only after validation passes.
 
 The command inspects the capture first and refuses to save if required or
 recommended checks fail. By default it also runs a live account probe after
@@ -178,7 +187,7 @@ Delete a local account:
 
 ```sh
 docker compose exec chatgpt-api chatgpt-api admin account delete \
-  --account old-free-main \
+  --account old-free \
   --base-url http://127.0.0.1:8000/v1 \
   --api-key local-dev-key
 ```

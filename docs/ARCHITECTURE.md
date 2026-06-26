@@ -30,7 +30,7 @@ There are three useful ways to use the project:
    ```sh
    python3 -m chatgpt_api api chat \
      --message "hello" \
-     --accounts free,go,plus-main,pro-main \
+     --accounts main-free,image-pro \
      --account-strategy random \
      --base-url http://127.0.0.1:8000/v1 \
      --api-key local-dev-key
