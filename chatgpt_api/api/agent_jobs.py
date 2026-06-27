@@ -650,7 +650,7 @@ class AgentJobRepository:
             next_cursor = f"{last.created_at}|{last.job_id}"
         return JobListPage(jobs=jobs, next_cursor=next_cursor, has_more=has_more)
 
-    def get_next_queued_job(self) -> AgentJob | None:
+    def get_next_queued_job(self, *, request_types: tuple[str, ...] | None = None) -> AgentJob | None:
         """Return the next eligible queued job in deterministic order.
 
         Phase 1C.2 supports only one actively executing job at a time, so the
@@ -661,16 +661,19 @@ class AgentJobRepository:
         3. ``job_id`` ascending as the tie-breaker
         """
 
+        where = ["status = ?"]
+        params: list[Any] = [STATUS_QUEUED]
+        if request_types:
+            placeholders = ", ".join("?" for _ in request_types)
+            where.append(f"request_type IN ({placeholders})")
+            params.extend(request_types)
+        sql = (
+            "SELECT * FROM agent_jobs WHERE "
+            + " AND ".join(where)
+            + " ORDER BY priority DESC, COALESCE(queued_at, created_at) ASC, created_at ASC, job_id ASC LIMIT 1"
+        )
         with self._connect() as db:
-            row = db.execute(
-                """
-                SELECT * FROM agent_jobs
-                WHERE status = ?
-                ORDER BY priority DESC, COALESCE(queued_at, created_at) ASC, job_id ASC
-                LIMIT 1
-                """,
-                (STATUS_QUEUED,),
-            ).fetchone()
+            row = db.execute(sql, params).fetchone()
         return self._job_row(row) if row is not None else None
 
     # -- state transitions --------------------------------------------------- #
@@ -1063,6 +1066,102 @@ class AgentJobRepository:
             db.execute(
                 "UPDATE agent_jobs SET result_id = ? WHERE job_id = ?",
                 (result_id, job_id),
+            )
+        return JobResult(
+            result_id=result_id,
+            job_id=job_id,
+            result_type=result_type,
+            created_at=now,
+            text_content=text_content,
+            response_storage_key=response_storage_key,
+            model=model,
+            account_alias=account_alias,
+            finish_reason=finish_reason,
+        )
+
+    def complete_job_with_result(
+        self,
+        job_id: str,
+        *,
+        result_type: str,
+        text_content: str | None = None,
+        response_storage_key: str | None = None,
+        model: str | None = None,
+        account_alias: str | None = None,
+        finish_reason: str | None = None,
+        expected: str = STATUS_RUNNING,
+        now: str | None = None,
+    ) -> JobResult:
+        """Atomically persist a job result and transition the job to success.
+
+        This prevents a late cancellation or other status race from leaving a
+        durable success result behind after the running lease has already lost
+        ownership of the job lifecycle.
+        """
+
+        validate_transition(expected, STATUS_SUCCEEDED)
+        now = now or utc_now()
+        result_id = new_id("result")
+        with self._connect() as db:
+            cursor = db.execute(
+                """
+                UPDATE agent_jobs
+                SET status = ?,
+                    completed_at = ?,
+                    account_alias = COALESCE(?, account_alias),
+                    result_id = ?,
+                    lease_owner = NULL,
+                    lease_expires_at = NULL
+                WHERE job_id = ? AND status = ?
+                """,
+                (
+                    STATUS_SUCCEEDED,
+                    now,
+                    account_alias,
+                    result_id,
+                    job_id,
+                    expected,
+                ),
+            )
+            if cursor.rowcount == 0:
+                existing = db.execute(
+                    "SELECT status FROM agent_jobs WHERE job_id = ?", (job_id,)
+                ).fetchone()
+                if existing is None:
+                    raise JobNotFound(f"job not found: {job_id}")
+                raise InvalidTransition(
+                    f"completion lost the race (job {job_id} is now {existing['status']!r})"
+                )
+            try:
+                db.execute(
+                    """
+                    INSERT INTO job_results (
+                        result_id, job_id, result_type, text_content,
+                        response_storage_key, model, account_alias, finish_reason, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        result_id,
+                        job_id,
+                        result_type,
+                        text_content,
+                        response_storage_key,
+                        model,
+                        account_alias,
+                        finish_reason,
+                        now,
+                    ),
+                )
+            except sqlite3.IntegrityError as exc:
+                raise IdempotencyConflict(
+                    f"a result already exists for job {job_id}"
+                ) from exc
+            self._append_event(
+                db,
+                job_id=job_id,
+                event_type="status_changed",
+                payload={"from": expected, "to": STATUS_SUCCEEDED},
+                now=now,
             )
         return JobResult(
             result_id=result_id,

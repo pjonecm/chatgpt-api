@@ -102,18 +102,21 @@ downloads, and developer tooling.
 
 ## Latest Validation Snapshot
 
-These checks were run locally on 2026-06-27 after the Phase 1A/1B Agent Job
-persistence + HTTP route additions (`chatgpt_api/api/agent_jobs.py`,
-`chatgpt_api/api/agent_job_routes.py`). Run on a **Windows** host; the single
+These checks were run locally on 2026-06-27 after the Phase 1C.3 Agent Job
+chat execution update (`chatgpt_api/api/text_execution.py`,
+`chatgpt_api/api/openai_compat.py`, `chatgpt_api/api/agent_job_coordinator.py`).
+Run on a **Windows** host; the single
 Python failure is the documented NTFS `0o600` platform mismatch
 (`CLAUDE.md` §17), not a code defect — on a Unix-like host it is 0 failures.
 
 | Check | Result |
 | --- | --- |
 | Python byte-compile: `python -m compileall chatgpt_api` | passed |
-| Python full test suite: `python -m pytest -q` | `327 passed, 1 known Windows 0o600 platform failure` |
-| Agent Job persistence tests: `python -m pytest tests/test_agent_jobs.py -q` | `82 passed` |
-| Agent Job route tests: `python -m pytest tests/test_agent_job_routes.py -q` | `57 passed` |
+| Python full test suite: `python -m pytest -q` | `371 passed, 1 known Windows 0o600 platform failure` |
+| Agent Job persistence tests: `python -m pytest tests/test_agent_jobs.py -q` | `96 passed` |
+| Agent Job route tests: `python -m pytest tests/test_agent_job_routes.py -q` | `58 passed` |
+| Agent Job coordinator tests: `python -m pytest tests/test_agent_job_coordinator.py -q` | `22 passed` |
+| Agent Job text execution tests: `python -m pytest tests/test_agent_job_text_execution.py -q` | `6 passed` |
 | Docker Compose config: `docker compose config --quiet` | passed |
 | Bridge Console / Character Game (`bun run check`/`build`/`test`) | not run on this host — `bun` unavailable; rerun on a host with `bun` before release |
 

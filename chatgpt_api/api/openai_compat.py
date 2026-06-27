@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
-from chatgpt_api.api.admin_store import BridgeAdminStore
+from chatgpt_api.api.admin_store import BridgeAdminStore, utc_now
 from chatgpt_api.api.agent_job_coordinator import AgentJobCoordinator
-from chatgpt_api.api.agent_jobs import AgentJobRepository
+from chatgpt_api.api.agent_jobs import AgentJobRepository, InvalidTransition, JobNotFound
 from chatgpt_api.api.agent_job_routes import AgentJobRouteService
 from chatgpt_api.api.config import OpenAICompatConfig
 from chatgpt_api.api.http_utils import (
@@ -50,6 +50,17 @@ from chatgpt_api.api.prompts import (
     DEEP_RESEARCH_SYSTEM_HINT,
     OPTIMIZED_TOOL_BRIDGE_PROMPT,
     TOOL_BRIDGE_PROMPT,
+)
+from chatgpt_api.api.text_execution import (
+    TextExecutionResult,
+    TextExecutionRuntime,
+    TextExecutionStorageError,
+    add_utc_seconds,
+    classify_retryable_error,
+    execute_non_streaming_chat,
+    load_request_json,
+    retry_backoff_seconds,
+    write_response_json,
 )
 from chatgpt_api.core.errors import ProviderError
 from chatgpt_api.core.types import ChatRequest, ContentPart, ImageRequest, ImageResponse, Message
@@ -850,6 +861,198 @@ def run_server(config: OpenAICompatConfig) -> None:
         server.server_close()
 
 
+def _text_execution_runtime() -> TextExecutionRuntime:
+    return TextExecutionRuntime(
+        str_or_none=_str_or_none,
+        split_model_agent_mode=_split_model_agent_mode,
+        resolve_agent_prompt_mode=_resolve_agent_prompt_mode,
+        resolve_model_alias=_resolve_model_alias,
+        resolve_temporary_chat_mode=_resolve_temporary_chat_mode,
+        router_for_request=_router_for_request,
+        should_use_agent_bridge=_should_use_agent_bridge,
+        collect_messages_text_with_accounts=_collect_messages_text_with_accounts,
+        collect_prompt_text_with_accounts=_collect_prompt_text_with_accounts,
+        collect_prompt_text=_collect_prompt_text,
+        conversation_init_metadata=_conversation_init_metadata,
+        build_chat_prompt=_build_chat_prompt,
+        build_missing_tool_retry_prompt=_build_missing_tool_retry_prompt,
+        parse_tool_calls=_parse_tool_calls,
+        filter_repeated_successful_tool_calls=_filter_repeated_successful_tool_calls,
+        retry_tool_policy_issues=_retry_tool_policy_issues,
+        retry_low_quality_tool_calls=_retry_low_quality_tool_calls,
+        should_retry_for_missing_tool_call=_should_retry_for_missing_tool_call,
+        has_successful_tool_result_after_latest_user=_has_successful_tool_result_after_latest_user,
+        has_completed_file_action_after_latest_user=_has_completed_file_action_after_latest_user,
+        response_is_tool_call_json=_response_is_tool_call_json,
+        response_abandons_workspace_action=_response_abandons_workspace_action,
+        completion_response=_completion_response,
+        empty_response_error=_empty_response_error,
+        provider_error_type=OpenAICompatProviderError,
+        provider_error_factory=OpenAICompatProviderError,
+        model_fallback_for_config=_model_fallback_for_config,
+        should_try_fallback_model=_should_try_fallback_model,
+        finish_chatgpt_operation=_finish_chatgpt_operation,
+    )
+
+
+def _build_agent_job_chat_executor(
+    config: OpenAICompatConfig,
+    router: AccountRouter,
+    coordinator: AgentJobCoordinator,
+    repo: AgentJobRepository,
+    output_root: Path,
+):
+    runtime = _text_execution_runtime()
+
+    def execute(job) -> None:
+        if job.request_type != "chat":
+            return
+        claim_now = utc_now()
+        lease_owner = f"agent-job-worker:{uuid.uuid4().hex}"
+        lease_expires_at = add_utc_seconds(claim_now, coordinator.lease_duration_seconds)
+        claim = repo.claim_job(
+            job.job_id,
+            lease_owner=lease_owner,
+            lease_expires_at=lease_expires_at,
+            now=claim_now,
+        )
+        if claim is None:
+            return
+
+        renew_stop = threading.Event()
+        lease_lost = threading.Event()
+
+        def renew_loop() -> None:
+            while not renew_stop.wait(coordinator.lease_renewal_interval_seconds):
+                renew_now = utc_now()
+                renew_expires_at = add_utc_seconds(renew_now, coordinator.lease_duration_seconds)
+                if not repo.renew_lease(
+                    job.job_id,
+                    lease_owner=lease_owner,
+                    lease_expires_at=renew_expires_at,
+                    now=renew_now,
+                ):
+                    lease_lost.set()
+                    renew_stop.set()
+                    return
+
+        renewer = threading.Thread(
+            target=renew_loop,
+            name=f"agent-job-lease-{job.job_id}",
+            daemon=True,
+        )
+        renewer.start()
+
+        def finalize_cancelled() -> None:
+            try:
+                repo.finish_attempt(
+                    job.job_id,
+                    claim.attempt_no,
+                    status="cancelled",
+                    error_code="job_cancelled",
+                    error_message="job cancelled during execution",
+                    now=utc_now(),
+                )
+            except JobNotFound:
+                pass
+            try:
+                repo.transition(
+                    job.job_id,
+                    target="cancelled",
+                    expected="cancel_requested",
+                    error_code="job_cancelled",
+                    error_message="job cancelled during execution",
+                    now=utc_now(),
+                )
+            except (InvalidTransition, JobNotFound):
+                pass
+
+        try:
+            request_body = load_request_json(output_root, job.job_id)
+            if request_body.get("type") != "chat":
+                raise ValueError("unsupported agent job request type")
+            if request_body.get("stream") is True:
+                raise ValueError("stream=true agent jobs are not supported")
+
+            result: TextExecutionResult = asyncio.run(
+                execute_non_streaming_chat(
+                    config,
+                    request_body,
+                    router,
+                    runtime,
+                )
+            )
+            latest = repo.get_job(job.job_id)
+            if latest.status == "cancel_requested" or lease_lost.is_set():
+                finalize_cancelled()
+                return
+            response_storage_key = write_response_json(output_root, job.job_id, result.response)
+            repo.complete_job_with_result(
+                job.job_id,
+                result_type="text",
+                text_content=result.text,
+                response_storage_key=response_storage_key,
+                model=request_body.get("model") if isinstance(request_body.get("model"), str) else job.model,
+                account_alias=result.account,
+                finish_reason=result.finish_reason,
+                now=utc_now(),
+            )
+            repo.finish_attempt(job.job_id, claim.attempt_no, status="succeeded", now=utc_now())
+            return
+        except TextExecutionStorageError as exc:
+            error_code = "storage_failure"
+            error_message = str(exc)
+            retryable = False
+        except OpenAICompatProviderError as exc:
+            status_code, payload = _provider_error_status_and_payload(exc)
+            error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
+            error_code = str(error.get("code") or "provider_error")
+            error_message = str(error.get("message") or str(exc))
+            retryable = classify_retryable_error(status_code)
+        except Exception as exc:  # noqa: BLE001
+            error_code = "internal_error"
+            error_message = str(exc) or "agent job execution failed"
+            retryable = False
+        finally:
+            renew_stop.set()
+            renewer.join(timeout=max(1.0, coordinator.lease_renewal_interval_seconds))
+
+        latest = repo.get_job(job.job_id)
+        if latest.status == "cancel_requested" or lease_lost.is_set():
+            finalize_cancelled()
+            return
+
+        repo.finish_attempt(
+            job.job_id,
+            claim.attempt_no,
+            status="failed",
+            error_code=error_code,
+            error_message=error_message,
+            now=utc_now(),
+        )
+        if retryable and latest.attempt_count < latest.max_attempts and latest.status == "running":
+            repo.schedule_retry(
+                job.job_id,
+                expected="running",
+                next_retry_at=add_utc_seconds(utc_now(), retry_backoff_seconds(claim.attempt_no)),
+                error_code=error_code,
+                error_message=error_message,
+                now=utc_now(),
+            )
+            return
+        if latest.status == "running":
+            repo.transition(
+                job.job_id,
+                target="failed",
+                expected="running",
+                error_code=error_code,
+                error_message=error_message,
+                now=utc_now(),
+            )
+
+    return execute
+
+
 def create_server(
     config: OpenAICompatConfig,
     *,
@@ -859,7 +1062,19 @@ def create_server(
     router = router or AccountRouter(_accounts_for_config(config), config.account_strategy)
     _configure_account_limits(config, router)
     store = _admin_store(config)
-    active_coordinator = coordinator or AgentJobCoordinator(AgentJobRepository(store))
+    output_root = _admin_db_path(config).parent / "agent-jobs"
+    if coordinator is None:
+        repo = AgentJobRepository(store)
+        active_coordinator = AgentJobCoordinator(repo)
+        active_coordinator._executor = _build_agent_job_chat_executor(  # type: ignore[attr-defined]
+            config,
+            router,
+            active_coordinator,
+            repo,
+            output_root,
+        )
+    else:
+        active_coordinator = coordinator
     return OpenAICompatHTTPServer(
         (config.host, config.port),
         _handler_class(config, router),
@@ -1076,178 +1291,15 @@ async def _chat_completion(
     operation = _create_chatgpt_operation("chat", requested_operation_id) if requested_operation_id else None
     operation_id = operation.operation_id if operation else None
     operation_extra = {"chatgpt_operation_id": operation_id} if operation_id else None
-    if not _should_use_agent_bridge(body, tools, model_agent_mode):
-        try:
-            account, provider, text = await _collect_messages_text_with_accounts(
-                config,
-                router,
-                messages,
-                requested_model,
-                model_slug,
-                thinking_effort,
-                temporary_chat,
-                operation_id=operation_id,
-            )
-            if not text:
-                raise OpenAICompatProviderError(
-                    _empty_response_error(),
-                    requested_model,
-                    model_slug,
-                    await _conversation_init_metadata(provider, model_slug),
-                    account=account,
-                )
-            return _completion_response(requested_model, text, [], account=account, extra=operation_extra)
-        finally:
-            _finish_chatgpt_operation(operation_id)
-    prompt = _build_chat_prompt(messages, tools, body.get("tool_choice"), agent_prompt_mode)
-    fallback_model_used: str | None = None
-    active_model_slug = model_slug
-    active_thinking_effort = thinking_effort
-    try:
-        account, provider, text = await _collect_prompt_text_with_accounts(
-            config,
-            router,
-            prompt,
-            requested_model,
-            model_slug,
-            thinking_effort,
-            temporary_chat,
-            operation_id=operation_id,
-        )
-    except OpenAICompatProviderError as exc:
-        fallback_model = _model_fallback_for_config(config, model_slug)
-        if fallback_model and _should_try_fallback_model(exc):
-            fallback_model_slug, fallback_effort = _resolve_model_alias(fallback_model, None)
-            account, provider, text = await _collect_prompt_text_with_accounts(
-                config,
-                router,
-                prompt,
-                requested_model,
-                fallback_model_slug,
-                fallback_effort,
-                temporary_chat,
-                operation_id=operation_id,
-            )
-            active_model_slug = fallback_model_slug
-            active_thinking_effort = fallback_effort
-            fallback_model_used = fallback_model_slug
-        else:
-            raise
-    if not text:
-        if _has_successful_tool_result_after_latest_user(messages) or _has_completed_file_action_after_latest_user(messages):
-            return _completion_response(requested_model, "Done.", [], account=account, extra=operation_extra)
-        raise OpenAICompatProviderError(
-            _empty_response_error(),
-            requested_model,
-            active_model_slug,
-            await _conversation_init_metadata(provider, active_model_slug),
-            account=account,
-        )
-    if _has_completed_file_action_after_latest_user(messages) and (
-        _response_is_tool_call_json(text) or _response_abandons_workspace_action(text)
-    ):
-        return _completion_response(
-            requested_model,
-            "Done.",
-            [],
-            account=account,
-            fallback_model=fallback_model_used,
-            extra=operation_extra,
-        )
-    if _has_successful_tool_result_after_latest_user(messages) and _response_is_tool_call_json(text):
-        return _completion_response(
-            requested_model,
-            "Done.",
-            [],
-            account=account,
-            fallback_model=fallback_model_used,
-            extra=operation_extra,
-        )
-    tool_calls = _filter_repeated_successful_tool_calls(_parse_tool_calls(text, tools), messages)
-    text, tool_calls = await _retry_tool_policy_issues(
-        provider,
-        prompt,
-        messages,
-        tools,
-        text,
-        tool_calls,
-        requested_model,
-        active_model_slug,
-        active_thinking_effort,
-        temporary_chat,
+    result = await execute_non_streaming_chat(
+        config,
+        body,
+        router,
+        _text_execution_runtime(),
+        operation_id=operation_id,
+        operation_extra=operation_extra,
     )
-    text, tool_calls = await _retry_low_quality_tool_calls(
-        provider,
-        prompt,
-        messages,
-        tools,
-        text,
-        tool_calls,
-        requested_model,
-        active_model_slug,
-        active_thinking_effort,
-        temporary_chat,
-    )
-    if not tool_calls and _should_retry_for_missing_tool_call(messages, tools, body.get("tool_choice"), text):
-        try:
-            text = await _collect_prompt_text(
-                provider,
-                _build_missing_tool_retry_prompt(prompt, text),
-                active_model_slug,
-                active_thinking_effort,
-                temporary_chat,
-                operation_id=operation_id,
-            )
-        except ProviderError as exc:
-            raise OpenAICompatProviderError(
-                exc,
-                requested_model,
-                active_model_slug,
-                await _conversation_init_metadata(provider, active_model_slug),
-            ) from exc
-        if not text:
-            raise OpenAICompatProviderError(
-                _empty_response_error(),
-                requested_model,
-                active_model_slug,
-                await _conversation_init_metadata(provider, active_model_slug),
-            )
-        tool_calls = _filter_repeated_successful_tool_calls(_parse_tool_calls(text, tools), messages)
-        text, tool_calls = await _retry_tool_policy_issues(
-            provider,
-            prompt,
-            messages,
-            tools,
-            text,
-            tool_calls,
-            requested_model,
-            active_model_slug,
-            active_thinking_effort,
-            temporary_chat,
-        )
-        text, tool_calls = await _retry_low_quality_tool_calls(
-            provider,
-            prompt,
-            messages,
-            tools,
-            text,
-            tool_calls,
-            requested_model,
-            active_model_slug,
-            active_thinking_effort,
-            temporary_chat,
-        )
-    try:
-        return _completion_response(
-            requested_model,
-            text,
-            tool_calls,
-            account=account,
-            fallback_model=fallback_model_used,
-            extra=operation_extra,
-        )
-    finally:
-        _finish_chatgpt_operation(operation_id)
+    return result.response
 
 
 async def _chat_completion_stream(

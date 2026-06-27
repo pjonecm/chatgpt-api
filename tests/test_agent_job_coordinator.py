@@ -23,6 +23,7 @@ from chatgpt_api.api.agent_jobs import (
     STATUS_VALIDATING,
 )
 from chatgpt_api.api.openai_compat import OpenAICompatConfig
+from chatgpt_api.api.text_execution import TextExecutionResult
 
 T0 = "2026-01-01T00:00:00Z"
 T1 = "2026-01-01T00:00:01Z"
@@ -311,7 +312,7 @@ def test_single_active_executor_boundary_leaves_second_job_queued(tmp_path):
     assert started == [first_job, second_job]
 
 
-def test_default_production_coordinator_does_not_claim_jobs(tmp_path):
+def test_coordinator_without_executor_does_not_claim_jobs(tmp_path):
     repo = _repo(tmp_path)
     job_id = _queued_job(repo)
     coordinator = AgentJobCoordinator(repo, now_fn=lambda: T3)
@@ -320,6 +321,65 @@ def test_default_production_coordinator_does_not_claim_jobs(tmp_path):
     job = repo.get_job(job_id)
     assert job.status == STATUS_QUEUED
     assert job.attempt_count == 0
+
+
+def test_create_server_installs_real_chat_executor_for_agent_jobs(tmp_path, monkeypatch):
+    cfg = OpenAICompatConfig(account="test", api_key="test-key", admin_db_path=tmp_path / "admin.sqlite")
+    server = compat.create_server(cfg)
+    executed = threading.Event()
+
+    async def fake_execute(config, body, router, runtime, *, operation_id=None, operation_extra=None):
+        executed.set()
+        return TextExecutionResult(
+            response={
+                "id": "chatcmpl_job",
+                "object": "chat.completion",
+                "choices": [{"index": 0, "message": {"role": "assistant", "content": "done"}, "finish_reason": "stop"}],
+                "model": body["model"],
+            },
+            text="done",
+            tool_calls=[],
+            account="test",
+            finish_reason="stop",
+        )
+
+    monkeypatch.setattr(compat, "execute_non_streaming_chat", fake_execute)
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        repo = AgentJobRepository(BridgeAdminStore(tmp_path / "admin.sqlite"))
+        job_id = repo.create_job(
+            request_type="chat",
+            model="auto",
+            request={"type": "chat", "model": "auto", "messages": [{"role": "user", "content": "hi"}]},
+            max_attempts=3,
+            now=T0,
+        ).job.job_id
+        repo.transition(job_id, target=STATUS_VALIDATING, expected=STATUS_ACCEPTED, now=T0)
+        request_dir = tmp_path / "agent-jobs" / job_id
+        request_dir.mkdir(parents=True, exist_ok=True)
+        (request_dir / "request.json").write_text(
+            '{"type":"chat","model":"auto","messages":[{"role":"user","content":"hi"}],"stream":false}',
+            encoding="utf-8",
+        )
+        repo.transition(job_id, target=STATUS_QUEUED, expected=STATUS_VALIDATING, now=T1)
+        server.agent_job_coordinator.wake()
+        assert executed.wait(timeout=3)
+        for _ in range(100):
+            if repo.get_job(job_id).status == "succeeded":
+                break
+            threading.Event().wait(0.02)
+        job = repo.get_job(job_id)
+        assert job.status == "succeeded"
+        assert job.result_id is not None
+        result = repo.get_result(job_id)
+        assert result is not None
+        assert result.text_content == "done"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
 
 
 def test_server_lifecycle_starts_and_stops_coordinator_once(tmp_path):

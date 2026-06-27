@@ -20,7 +20,10 @@
 > **Phase 1C.1 (retry schema + repository primitives) implemented.**
 > **Phase 1C.2 (in-process coordinator lifecycle, startup recovery wiring,
 > retry promotion polling, and non-provider cancellation finalization)
-> implemented.** Provider execution remains deferred to Phase 1C.3+.
+> implemented.**
+> **Phase 1C.3 (shared text execution adapter + non-streaming chat execution)
+> implemented.** Streaming chat, deep research execution, image jobs, and
+> multimodal execution remain deferred.
 
 - **Objective:** restart-safe async jobs for text/chat + research.
 - **In scope:**
@@ -35,13 +38,13 @@
   - Endpoints: `POST /v1/agent/jobs`, `GET /v1/agent/jobs`, `GET …/{id}`,
     `GET …/{id}/result`, `POST …/{id}/cancel`, `GET …/{id}/events` (JSON,
     not SSE), `GET …/{id}/artifacts`. **(1B done — chat + deep_research only;
-    jobs queue but do not execute)**
+    non-streaming chat jobs now execute, deep_research still queues only)**
   - In-process coordinator (single process; SQLite poller + wake signal).
     **(1C.2 done for lifecycle/polling/recovery/cancellation; production
-    default does not claim jobs until a real executor is installed)**
+    default now claims eligible queued chat jobs through the real executor)**
   - Reuse `AccountRouter` + `BoundedSemaphore` + `ChatGPTProvider`.
-    **(not started; deferred to 1C.3+)**
-  - Local storage `outputs/agent-jobs/<job_id>/` (request.json, response.json). **(1A: metadata + path only; file writing is later)**
+    **(1C.3 done for non-streaming chat jobs; other job types deferred)**
+  - Local storage `outputs/agent-jobs/<job_id>/` (request.json, response.json). **(1C.3 done for request persistence + successful chat response persistence)**
 - **Out of scope:** image/multimodal inputs (Phase 2), SSE streaming,
   callbacks, per-client auth.
 - **Schema changes:** additive tables only (idempotent). **(1A + 1C.1 done)**

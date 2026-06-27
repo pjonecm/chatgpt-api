@@ -40,6 +40,11 @@ from chatgpt_api.api.agent_jobs import (
     STATUS_QUEUED,
     STATUS_VALIDATING,
 )
+from chatgpt_api.api.text_execution import (
+    TextExecutionStorageError,
+    load_response_json,
+    request_file_path,
+)
 
 SUPPORTED_JOB_TYPES = ("chat", "deep_research")
 DEEP_RESEARCH_MODEL = "chatgpt-deep-research"
@@ -219,13 +224,6 @@ def normalize_request(body: Any) -> tuple[dict[str, Any], str, int, str | None, 
 # --------------------------------------------------------------------------- #
 
 
-def _request_file_path(output_root: Path, job_id: str) -> Path:
-    """On-disk path for a job's request.json. job_id is server-generated and
-    opaque; client input is never used as a filesystem path (no traversal)."""
-
-    return output_root / job_id / "request.json"
-
-
 def write_request_json(output_root: Path, job_id: str, normalized_request: dict[str, Any]) -> None:
     """Atomically persist the normalized request as UTF-8 JSON.
 
@@ -235,7 +233,7 @@ def write_request_json(output_root: Path, job_id: str, normalized_request: dict[
     auth headers, cookies, API keys, capture contents, or transport metadata.
     """
 
-    target = _request_file_path(output_root, job_id)
+    target = request_file_path(output_root, job_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     data = json.dumps(normalized_request, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     tmp = target.with_name(f"{target.name}.tmp.{os.getpid()}")
@@ -299,7 +297,7 @@ def serialize_status(job, *, artifact_count: int = 0) -> dict[str, Any]:
     }
 
 
-def serialize_result(result) -> dict[str, Any]:
+def serialize_result(result, response: dict[str, Any] | None = None) -> dict[str, Any]:
     # Never expose response_storage_key (filesystem path).
     payload: dict[str, Any] = {
         "job_id": result.job_id,
@@ -314,6 +312,8 @@ def serialize_result(result) -> dict[str, Any]:
         payload["account_alias"] = result.account_alias
     if result.finish_reason is not None:
         payload["finish_reason"] = result.finish_reason
+    if response is not None:
+        payload["response"] = response
     return payload
 
 
@@ -401,7 +401,7 @@ class AgentJobRouteService:
             # events. Verify the request file is still present; if it is
             # missing, surface a storage consistency failure rather than
             # pretending the job is healthy (smallest safe design).
-            request_path = _request_file_path(self._output_root, create.job.job_id)
+            request_path = request_file_path(self._output_root, create.job.job_id)
             if not request_path.exists():
                 return 500, {
                     "job_id": create.job.job_id,
@@ -477,7 +477,17 @@ class AgentJobRouteService:
                     f"job failed without a result: {job.error_code or 'unknown'}",
                 )
             return 409, build_error("pending", "The job result is not available yet.")
-        return 200, serialize_result(result)
+        response = None
+        if result.response_storage_key:
+            try:
+                response = load_response_json(self._output_root.parent, result.response_storage_key)
+            except TextExecutionStorageError:
+                return 500, build_error(
+                    "storage_failure",
+                    "job result payload is missing or invalid",
+                    type_="internal_error",
+                )
+        return 200, serialize_result(result, response)
 
     # -- events -------------------------------------------------------------- #
 

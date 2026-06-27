@@ -1,11 +1,12 @@
-"""Phase 1C.2 in-process Agent Job coordinator lifecycle.
+"""Phase 1C.3 in-process Agent Job coordinator lifecycle.
 
 Owns startup recovery, bounded polling, durable retry promotion, non-running
 cancellation finalization, and the single-active-job execution boundary.
 
-This phase intentionally does not execute provider work by default. Production
-servers construct the coordinator without an executor callback, so queued jobs
-remain queued until Phase 1C.3 installs a real claim-and-execute adapter.
+Production servers install a real executor callback for eligible queued chat
+jobs. The coordinator still owns only lifecycle concerns: startup recovery,
+bounded polling, retry promotion, cancellation finalization, and the single
+active execution boundary.
 """
 
 from __future__ import annotations
@@ -71,6 +72,10 @@ class AgentJobCoordinator:
     def lease_renewal_interval_seconds(self) -> int:
         return self._lease_renewal_interval_seconds
 
+    @property
+    def stop_requested(self) -> bool:
+        return self._stop_event.is_set()
+
     def start(self) -> None:
         with self._lock:
             if self._started:
@@ -123,7 +128,7 @@ class AgentJobCoordinator:
         selected_job_id: str | None = None
         executor_invoked = False
         if self._executor is not None and not self._executor_active:
-            next_job = self._repo.get_next_queued_job()
+            next_job = self._repo.get_next_queued_job(request_types=("chat",))
             if next_job is not None:
                 selected_job_id = next_job.job_id
                 LOGGER.info(
@@ -162,4 +167,3 @@ class AgentJobCoordinator:
                 self.run_once()
             except Exception:  # noqa: BLE001
                 LOGGER.exception("agent job coordinator loop failed; continuing")
-

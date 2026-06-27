@@ -185,6 +185,10 @@ ownership boundaries that matter for open-source maintenance:
 - `chatgpt_api/api/openai_compat.py`: route orchestrator, account routing,
   operation cancellation, streaming, admin endpoints, response shaping, and
   server lifecycle wiring for the coordinator.
+- `chatgpt_api/api/text_execution.py`: shared non-streaming text execution
+  adapter used by both synchronous `POST /v1/chat/completions` and the Agent
+  Job coordinator, plus safe request/response JSON storage helpers and small
+  retry/backoff utilities.
 
 `openai_compat.py` is still intentionally the main facade while routes are
 stabilizing. Future splits should move one domain at a time:

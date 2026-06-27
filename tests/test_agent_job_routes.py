@@ -35,6 +35,7 @@ from chatgpt_api.api.agent_jobs import (
 )
 from chatgpt_api.api.admin_store import BridgeAdminStore
 from chatgpt_api.api.openai_compat import OpenAICompatConfig
+from chatgpt_api.api.text_execution import write_response_json
 
 T0 = "2026-01-01T00:00:00Z"
 
@@ -332,6 +333,7 @@ def test_safe_result_serializer_excludes_storage_paths(tmp_path):
     serialized = serialize_result(result)
     assert "response_storage_key" not in serialized
     assert serialized["text"] == "answer"
+    assert "response" not in serialized
 
 
 def test_safe_event_serializer_parses_json(tmp_path):
@@ -558,15 +560,39 @@ def test_seeded_synthetic_result_returns_200(tmp_path):
         store = BridgeAdminStore(tmp_path / "admin.sqlite")
         repo = AgentJobRepository(store)
         repo.transition(p["job_id"], target="running", expected="queued")
-        repo.transition(p["job_id"], target="succeeded", expected="running")
-        repo.save_result(p["job_id"], result_type="text", text_content="answer", finish_reason="stop")
+        response = {"id": "chatcmpl_test", "object": "chat.completion", "choices": [{"message": {"role": "assistant", "content": "answer"}}]}
+        response_storage_key = write_response_json(tmp_path / "agent-jobs", p["job_id"], response)
+        repo.complete_job_with_result(
+            p["job_id"],
+            result_type="text",
+            text_content="answer",
+            response_storage_key=response_storage_key,
+            finish_reason="stop",
+        )
         status, payload, _ = _http(server, "GET", f"/v1/agent/jobs/{p['job_id']}/result")
         assert status == 200
         assert payload["text"] == "answer"
+        assert payload["response"] == response
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
+
+
+def test_result_route_returns_storage_failure_when_response_payload_is_missing(tmp_path):
+    svc, repo, _ = _svc(tmp_path)
+    _, created = svc.submit(_chat_body(), None)
+    repo.transition(created["job_id"], target="running", expected="queued")
+    repo.complete_job_with_result(
+        created["job_id"],
+        result_type="text",
+        text_content="answer",
+        response_storage_key=f"agent-jobs/{created['job_id']}/results/response.json",
+        finish_reason="stop",
+    )
+    status, payload = svc.get_result(created["job_id"])
+    assert status == 500
+    assert payload["error"]["code"] == "storage_failure"
 
 
 def test_events_endpoint_returns_json(http_server):

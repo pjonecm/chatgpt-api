@@ -41,6 +41,7 @@ from chatgpt_api.api.openai_compat import (
 )
 from chatgpt_api.core.errors import ProviderError
 from chatgpt_api.core.types import ChatDelta, ImageAsset, ImageResponse
+from chatgpt_api.api.text_execution import TextExecutionResult
 from chatgpt_api.providers.chatgpt.crypto import decrypt_text, is_encrypted, load_secrets_key
 
 
@@ -177,6 +178,37 @@ def test_provider_error_payload_for_missing_account_capture():
     assert payload["error"]["code"] == "chatgpt_missing_account_capture"
     assert payload["error"]["type"] == "invalid_request_error"
     assert payload["error"]["chatgpt_account"] == "free"
+
+
+def test_chat_completion_non_streaming_delegates_to_shared_text_executor(monkeypatch):
+    async def fake_execute(config, body, router, runtime, *, operation_id=None, operation_extra=None):
+        assert body["messages"][0]["content"] == "hi"
+        assert operation_id == "chatgptop_123"
+        assert operation_extra == {"chatgpt_operation_id": "chatgptop_123"}
+        return TextExecutionResult(
+            response={"id": "chatcmpl_test", "choices": []},
+            text="ok",
+            tool_calls=[],
+            account="free",
+            finish_reason="stop",
+        )
+
+    monkeypatch.setattr(compat, "execute_non_streaming_chat", fake_execute)
+    monkeypatch.setattr(
+        compat,
+        "_create_chatgpt_operation",
+        lambda kind, requested_id=None: type("Op", (), {"operation_id": "chatgptop_123"})(),
+    )
+    monkeypatch.setattr(compat, "_finish_chatgpt_operation", lambda operation_id: None)
+
+    payload = compat.asyncio.run(
+        compat._chat_completion(
+            OpenAICompatConfig(account="free"),
+            {"model": "auto", "messages": [{"role": "user", "content": "hi"}], "chatgpt_operation_id": "client-op"},
+        )
+    )
+
+    assert payload["id"] == "chatcmpl_test"
 
 
 def test_admin_save_capture_requires_recommended_fields(tmp_path):
