@@ -63,7 +63,7 @@ GET  /v1/agent/jobs/{job_id}/artifacts   artifacts associated with the job
 POST /v1/agent/jobs/{job_id}/cancel      persist a cancellation request
 ```
 
-Phase 1B status (2026-06-27):
+Phase 1C.2 status (2026-06-27):
 
 - Only `chat` and `deep_research` submissions are accepted.
   `image_generation`, `image_edit`, and `vision` are rejected with
@@ -71,12 +71,17 @@ Phase 1B status (2026-06-27):
 - A new job synchronously progresses `accepted → validating → queued` and
   its normalized request is persisted atomically to
   `outputs/agent-jobs/<job_id>/request.json`.
-- **Queued jobs are NOT executed.** No coordinator, provider, account
-  router, or concurrency limiter is invoked. Results are unavailable until
-  Phase 1C; `GET .../result` returns `409 pending` for queued jobs.
+- **Queued jobs are NOT executed yet.** Phase 1C.2 adds the in-process
+  coordinator lifecycle, startup recovery, retry promotion polling, and
+  non-running cancellation finalization, but it still does **not** invoke the
+  provider, account router, or concurrency limiters for agent jobs. Results
+  remain unavailable until provider execution lands; `GET .../result` returns
+  `409 pending` for queued jobs.
 - Events are returned as JSON only (no `text/event-stream`).
-- Cancellation stops at `cancel_requested`; it is **not** transitioned to
-  `cancelled` and does not invoke provider cancellation.
+- Non-running cancellations (`accepted`, `validating`, `queued`,
+  `retry_wait`) are finalized asynchronously to `cancelled` by the
+  coordinator without provider interaction. Running/streaming cancellation
+  still does not invoke provider cancellation in this phase.
 - Idempotency: `Idempotency-Key` header takes precedence over
   `body.idempotency_key`; same key + same request → `200` (reused), same key
   + different request → `409 idempotency_conflict`.

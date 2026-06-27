@@ -19,6 +19,7 @@ from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
 from chatgpt_api.api.admin_store import BridgeAdminStore
+from chatgpt_api.api.agent_job_coordinator import AgentJobCoordinator
 from chatgpt_api.api.agent_jobs import AgentJobRepository
 from chatgpt_api.api.agent_job_routes import AgentJobRouteService
 from chatgpt_api.api.config import OpenAICompatConfig
@@ -77,6 +78,34 @@ class _DownloadFile:
 
 _DOWNLOAD_FILES: dict[str, _DownloadFile] = {}
 _DOWNLOAD_FILES_LOCK = threading.Lock()
+
+
+class OpenAICompatHTTPServer(ThreadingHTTPServer):
+    """HTTP server that owns the in-process Agent Job coordinator lifecycle."""
+
+    def __init__(
+        self,
+        server_address: tuple[str, int],
+        request_handler_class: type[BaseHTTPRequestHandler],
+        *,
+        coordinator: AgentJobCoordinator | None = None,
+    ) -> None:
+        super().__init__(server_address, request_handler_class)
+        self.agent_job_coordinator = coordinator
+
+    def serve_forever(self, poll_interval: float = 0.5) -> None:
+        if self.agent_job_coordinator is not None:
+            self.agent_job_coordinator.start()
+        try:
+            super().serve_forever(poll_interval=poll_interval)
+        finally:
+            if self.agent_job_coordinator is not None:
+                self.agent_job_coordinator.stop()
+
+    def server_close(self) -> None:
+        if self.agent_job_coordinator is not None:
+            self.agent_job_coordinator.stop()
+        super().server_close()
 
 
 class AccountRouter:
@@ -803,8 +832,7 @@ def run_server(config: OpenAICompatConfig) -> None:
     accounts = _accounts_for_config(config)
     router = AccountRouter(accounts, config.account_strategy)
     _configure_account_limits(config, router)
-    _admin_store(config)
-    server = ThreadingHTTPServer((config.host, config.port), _handler_class(config, router))
+    server = create_server(config, router=router)
     print(f"chatgpt-api bridge server listening on http://{config.host}:{config.port}")
     print(f"accounts={', '.join(accounts)}")
     print(f"account_strategy={router.strategy}")
@@ -820,6 +848,23 @@ def run_server(config: OpenAICompatConfig) -> None:
         pass
     finally:
         server.server_close()
+
+
+def create_server(
+    config: OpenAICompatConfig,
+    *,
+    router: AccountRouter | None = None,
+    coordinator: AgentJobCoordinator | None = None,
+) -> OpenAICompatHTTPServer:
+    router = router or AccountRouter(_accounts_for_config(config), config.account_strategy)
+    _configure_account_limits(config, router)
+    store = _admin_store(config)
+    active_coordinator = coordinator or AgentJobCoordinator(AgentJobRepository(store))
+    return OpenAICompatHTTPServer(
+        (config.host, config.port),
+        _handler_class(config, router),
+        coordinator=active_coordinator,
+    )
 
 
 def _handler_class(config: OpenAICompatConfig, router: AccountRouter | None = None):
@@ -915,7 +960,7 @@ def _handler_class(config: OpenAICompatConfig, router: AccountRouter | None = No
                 _send_json(self, status, payload)
                 return
             if path == "/v1/agent/jobs" or path.startswith("/v1/agent/jobs/"):
-                status, payload = _agent_route_service(config).handle_get(path, query)
+                status, payload = _agent_route_service_for_server(config, self.server).handle_get(path, query)
                 _send_json(self, status, payload)
                 return
             _send_json(self, 404, {"error": {"message": "not found", "type": "not_found"}})
@@ -953,7 +998,11 @@ def _handler_class(config: OpenAICompatConfig, router: AccountRouter | None = No
                 else:
                     body = None
                 idempotency_key = self.headers.get("Idempotency-Key")
-                status, payload = _agent_route_service(config).handle_post(path, body, idempotency_key)
+                status, payload = _agent_route_service_for_server(config, self.server).handle_post(
+                    path,
+                    body,
+                    idempotency_key,
+                )
                 _send_json(self, status, payload)
                 return
             if path not in {"/v1/chat/completions", "/v1/images/generations", "/v1/images/edits", "/v1/chatgpt/vision"}:
@@ -3009,6 +3058,19 @@ def _agent_route_service(config: OpenAICompatConfig) -> AgentJobRouteService:
     repo = AgentJobRepository(_admin_store(config))
     output_root = _admin_db_path(config).parent / "agent-jobs"
     return AgentJobRouteService(repo, output_root)
+
+
+def _agent_route_service_for_server(
+    config: OpenAICompatConfig,
+    server: Any | None,
+) -> AgentJobRouteService:
+    wake_callback = None
+    coordinator = getattr(server, "agent_job_coordinator", None) if server is not None else None
+    if coordinator is not None:
+        wake_callback = coordinator.wake
+    repo = AgentJobRepository(_admin_store(config))
+    output_root = _admin_db_path(config).parent / "agent-jobs"
+    return AgentJobRouteService(repo, output_root, wake_callback=wake_callback)
 
 
 def _project_root() -> Path:

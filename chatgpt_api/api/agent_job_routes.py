@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -352,9 +353,15 @@ class AgentJobRouteService:
     the existing one-connection-per-op store pattern).
     """
 
-    def __init__(self, repo: AgentJobRepository, output_root: Path) -> None:
+    def __init__(
+        self,
+        repo: AgentJobRepository,
+        output_root: Path,
+        wake_callback: Callable[[], None] | None = None,
+    ) -> None:
         self._repo = repo
         self._output_root = output_root
+        self._wake_callback = wake_callback
 
     # -- submission ---------------------------------------------------------- #
 
@@ -427,6 +434,7 @@ class AgentJobRouteService:
             job = self._repo.transition(job.job_id, target=STATUS_QUEUED, expected=STATUS_VALIDATING)
         except Exception as exc:  # noqa: BLE001
             return 500, build_error("internal_error", "could not queue job", type_="internal_error")
+        self._wake_coordinator()
 
         return 201, serialize_submission(job)
 
@@ -511,12 +519,21 @@ class AgentJobRouteService:
                 "cancel_conflict",
                 "job is not in a cancellable state",
             )
+        self._wake_coordinator()
         return 200, {
             "job_id": job.job_id,
             "status": job.status,
             "cancel_requested_at": job.cancel_requested_at,
             "message": "Cancellation has been recorded. Final cancellation resolution requires the execution coordinator.",
         }
+
+    def _wake_coordinator(self) -> None:
+        if self._wake_callback is None:
+            return
+        try:
+            self._wake_callback()
+        except Exception:
+            pass
 
     # -- dispatch ------------------------------------------------------------ #
 

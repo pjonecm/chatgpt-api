@@ -18,8 +18,9 @@
 
 > **Status: Phase 1A (persistence) + Phase 1B (HTTP routes) implemented.**
 > **Phase 1C.1 (retry schema + repository primitives) implemented.**
-> Phase 1C.2+ (in-process coordinator, startup recovery wiring, provider
-> execution) remains proposed.
+> **Phase 1C.2 (in-process coordinator lifecycle, startup recovery wiring,
+> retry promotion polling, and non-provider cancellation finalization)
+> implemented.** Provider execution remains deferred to Phase 1C.3+.
 
 - **Objective:** restart-safe async jobs for text/chat + research.
 - **In scope:**
@@ -35,8 +36,11 @@
     `GET …/{id}/result`, `POST …/{id}/cancel`, `GET …/{id}/events` (JSON,
     not SSE), `GET …/{id}/artifacts`. **(1B done — chat + deep_research only;
     jobs queue but do not execute)**
-  - In-process coordinator (single process; SQLite claim). **(not started)**
-  - Reuse `AccountRouter` + `BoundedSemaphore` + `ChatGPTProvider`. **(not started)**
+  - In-process coordinator (single process; SQLite poller + wake signal).
+    **(1C.2 done for lifecycle/polling/recovery/cancellation; production
+    default does not claim jobs until a real executor is installed)**
+  - Reuse `AccountRouter` + `BoundedSemaphore` + `ChatGPTProvider`.
+    **(not started; deferred to 1C.3+)**
   - Local storage `outputs/agent-jobs/<job_id>/` (request.json, response.json). **(1A: metadata + path only; file writing is later)**
 - **Out of scope:** image/multimodal inputs (Phase 2), SSE streaming,
   callbacks, per-client auth.
@@ -133,8 +137,9 @@
 7. Security boundaries (done — `SECURITY_MODEL.md`).
 8. Durable job persistence + repository tests.
 9. Job endpoints.
-10. Execution coordinator + restart recovery.
-11. Read-only monitoring UI.
+10. Execution coordinator + restart recovery. **(Phase 1C.2 shipped for
+    lifecycle/recovery/polling only; provider execution deferred)**
+11. Text execution adapter + non-streaming provider execution.
 12. Text-job submission UI.
 13. Image/multimodal execution.
 14. Image-related UI.

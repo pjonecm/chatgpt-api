@@ -5,8 +5,11 @@
 > The routes below (`POST /v1/agent/jobs`, list, status, result, events,
 > artifacts, cancel) are implemented for `chat` and `deep_research` only.
 > Jobs progress `accepted → validating → queued` and **do not execute**
-> (Phase 1C). Events are JSON-only (no SSE). Cancellation stops at
-> `cancel_requested`. Existing synchronous `/v1/*` routes are unchanged.
+> yet (provider execution is deferred beyond Phase 1C.2). Events are
+> JSON-only (no SSE). The coordinator now finalizes persisted non-running
+> cancellations to `cancelled`, while running/streaming cancellation still
+> waits for later provider-stop integration. Existing synchronous `/v1/*`
+> routes are unchanged.
 > Not the official OpenAI API — "OpenAI-shaped".
 
 ## Routes
@@ -232,9 +235,13 @@ in Phase 1; agent/operator separation is logical only — see
 
 ## 5. Cancellation — `POST /v1/agent/jobs/{job_id}/cancel`
 
-- Idempotent. Sets `cancel_requested_at`; transitions `running → cancel_requested`
-  then `cancel_requested → cancelled` once the provider stop completes
-  (best-effort, reuses `_stop_chatgpt_operation`).
+- Idempotent. Persists `cancel_requested_at`.
+- For jobs that were still non-running when cancellation was requested
+  (`accepted`, `validating`, `queued`, `retry_wait`), the in-process
+  coordinator finalizes `cancel_requested → cancelled` without contacting the
+  provider.
+- For jobs cancelled while provider work is running/streaming, durable status
+  remains `cancel_requested` until later provider-stop integration lands.
 - 409 if already terminal (except `cancelled` → 200).
 - Returns the updated status.
 

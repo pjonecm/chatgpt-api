@@ -233,6 +233,11 @@ class JobListPage:
     has_more: bool
 
 
+@dataclass(frozen=True, slots=True)
+class CancellationFinalizationSummary:
+    cancelled: list[str] = field(default_factory=list)
+
+
 # --------------------------------------------------------------------------- #
 # ID + hash + redaction helpers
 # --------------------------------------------------------------------------- #
@@ -644,6 +649,29 @@ class AgentJobRepository:
             last = jobs[-1]
             next_cursor = f"{last.created_at}|{last.job_id}"
         return JobListPage(jobs=jobs, next_cursor=next_cursor, has_more=has_more)
+
+    def get_next_queued_job(self) -> AgentJob | None:
+        """Return the next eligible queued job in deterministic order.
+
+        Phase 1C.2 supports only one actively executing job at a time, so the
+        coordinator asks for at most one queued job. Ordering is:
+
+        1. higher ``priority`` first
+        2. oldest ``queued_at`` (falling back to ``created_at``) first
+        3. ``job_id`` ascending as the tie-breaker
+        """
+
+        with self._connect() as db:
+            row = db.execute(
+                """
+                SELECT * FROM agent_jobs
+                WHERE status = ?
+                ORDER BY priority DESC, COALESCE(queued_at, created_at) ASC, job_id ASC
+                LIMIT 1
+                """,
+                (STATUS_QUEUED,),
+            ).fetchone()
+        return self._job_row(row) if row is not None else None
 
     # -- state transitions --------------------------------------------------- #
 
@@ -1105,13 +1133,18 @@ class AgentJobRepository:
                 f"cannot cancel job in status {job.status!r}"
             )
         with self._connect() as db:
+            set_clauses = ["status = ?", "cancel_requested_at = ?"]
+            params: list[Any] = [STATUS_CANCEL_REQUESTED, now]
+            if job.status == STATUS_RETRY_WAIT:
+                set_clauses.append("next_retry_at = NULL")
+            if job.status not in ACTIVE_EXECUTION_STATUSES:
+                set_clauses.append("lease_owner = NULL")
+                set_clauses.append("lease_expires_at = NULL")
             cursor = db.execute(
-                """
-                UPDATE agent_jobs
-                SET status = ?, cancel_requested_at = ?
-                WHERE job_id = ? AND status = ?
-                """,
-                (STATUS_CANCEL_REQUESTED, now, job_id, job.status),
+                "UPDATE agent_jobs SET "
+                + ", ".join(set_clauses)
+                + " WHERE job_id = ? AND status = ?",
+                (*params, job_id, job.status),
             )
             if cursor.rowcount == 0:
                 raise InvalidTransition(
@@ -1125,6 +1158,79 @@ class AgentJobRepository:
                 now=now,
             )
         return self.get_job(job_id)
+
+    def finalize_pending_cancellations(
+        self,
+        *,
+        now: str | None = None,
+        limit: int = 100,
+    ) -> CancellationFinalizationSummary:
+        """Finalize persisted non-running ``cancel_requested`` jobs.
+
+        The repository remains the SQLite authority for cancellation races.
+        Only jobs whose persisted cancellation request originated from a
+        non-running state are finalized here. Jobs cancelled while provider
+        work was running/streaming remain pending for a later execution phase.
+        """
+
+        now = now or utc_now()
+        safe_limit = max(1, min(int(limit), 500))
+        summary = CancellationFinalizationSummary()
+        with self._connect() as db:
+            rows = db.execute(
+                """
+                SELECT job_id
+                FROM agent_jobs
+                WHERE status = ?
+                ORDER BY COALESCE(cancel_requested_at, created_at) ASC, job_id ASC
+                LIMIT ?
+                """,
+                (STATUS_CANCEL_REQUESTED, safe_limit),
+            ).fetchall()
+            for row in rows:
+                job_id = row["job_id"]
+                event_row = db.execute(
+                    """
+                    SELECT event_json
+                    FROM job_events
+                    WHERE job_id = ? AND event_type = 'cancel_requested'
+                    ORDER BY sequence_no DESC
+                    LIMIT 1
+                    """,
+                    (job_id,),
+                ).fetchone()
+                if event_row is None:
+                    continue
+                try:
+                    event_payload = json.loads(event_row["event_json"])
+                except json.JSONDecodeError:
+                    event_payload = {}
+                requested_from = event_payload.get("from")
+                if requested_from in ACTIVE_EXECUTION_STATUSES:
+                    continue
+                cursor = db.execute(
+                    """
+                    UPDATE agent_jobs
+                    SET status = ?,
+                        cancelled_at = ?,
+                        lease_owner = NULL,
+                        lease_expires_at = NULL,
+                        next_retry_at = NULL
+                    WHERE job_id = ? AND status = ?
+                    """,
+                    (STATUS_CANCELLED, now, job_id, STATUS_CANCEL_REQUESTED),
+                )
+                if cursor.rowcount != 1:
+                    continue
+                self._append_event(
+                    db,
+                    job_id=job_id,
+                    event_type="transition",
+                    payload={"from": STATUS_CANCEL_REQUESTED, "to": STATUS_CANCELLED},
+                    now=now,
+                )
+                summary.cancelled.append(job_id)
+        return summary
 
     # -- lease claim + renewal ---------------------------------------------- #
 

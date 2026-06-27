@@ -169,15 +169,22 @@ ownership boundaries that matter for open-source maintenance:
   operator settings.
 - `chatgpt_api/api/agent_jobs.py`: Phase 1A durable AgentJob persistence —
   state machine, idempotency, canonical request hashing, IDs, redaction, and
-  repository operations for jobs/results/events/attempts. No HTTP routes or
-  execution coordinator yet (see `docs/agent_bridge/`).
+  repository operations for jobs/results/events/attempts, plus coordinator-
+  facing queue selection and non-running cancellation finalization.
 - `chatgpt_api/api/agent_job_routes.py`: Phase 1B additive `/v1/agent/*`
   HTTP route service — request validation, normalization, idempotency-header
   precedence, atomic request-file persistence, safe serializers, and
   domain→HTTP mapping. The facade (`openai_compat.py`) only authorizes,
-  parses, and dispatches to this service. No coordinator or provider calls.
+  parses, dispatches, and wakes the coordinator after durable queue/cancel
+  writes. No provider calls.
+- `chatgpt_api/api/agent_job_coordinator.py`: Phase 1C.2 in-process
+  coordinator lifecycle — startup recovery, durable retry promotion polling,
+  non-running cancellation finalization, wake/stop signaling, and the
+  single-active-job execution boundary. Production/default wiring does not
+  claim queued jobs until a real provider executor lands.
 - `chatgpt_api/api/openai_compat.py`: route orchestrator, account routing,
-  operation cancellation, streaming, admin endpoints, and response shaping.
+  operation cancellation, streaming, admin endpoints, response shaping, and
+  server lifecycle wiring for the coordinator.
 
 `openai_compat.py` is still intentionally the main facade while routes are
 stabilizing. Future splits should move one domain at a time:

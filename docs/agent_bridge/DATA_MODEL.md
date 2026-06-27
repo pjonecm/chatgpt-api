@@ -1,13 +1,17 @@
 # Data Model — AI Agent → ChatGPT API Bridge
 
-> **Status: Phase 1A persistence + Phase 1B HTTP routes implemented, and
-> Phase 1C.1 retry persistence primitives implemented** in
-> `chatgpt_api/api/agent_jobs.py` + `BridgeAdminStore._migrate()`
-> (2026-06-27). The tables, indexes, state machine, idempotency, claim/lease,
-> recovery sweep, durable `retry_wait` scheduling, due-retry promotion
-> primitives, and redaction below are shipped and covered by
-> `tests/test_agent_jobs.py`. The execution coordinator, provider calls, and
-> streaming-delta events remain proposed (Phase 1C.2+).
+> **Status: Phase 1A persistence + Phase 1B HTTP routes implemented,
+> Phase 1C.1 retry persistence primitives implemented, and Phase 1C.2
+> coordinator lifecycle/recovery polling shipped** in
+> `chatgpt_api/api/agent_jobs.py`,
+> `chatgpt_api/api/agent_job_routes.py`,
+> `chatgpt_api/api/agent_job_coordinator.py`, and
+> `BridgeAdminStore._migrate()` (2026-06-27). The tables, indexes, state
+> machine, idempotency, claim/lease, recovery sweep, durable `retry_wait`
+> scheduling, due-retry promotion primitives, queued/non-running
+> cancellation finalization, and redaction below are shipped and covered by
+> `tests/test_agent_jobs.py` + `tests/test_agent_job_coordinator.py`.
+> Provider execution and streaming-delta events remain deferred (Phase 1C.3+).
 >
 > Implemented as idempotent `CREATE TABLE IF NOT EXISTS` in
 > `BridgeAdminStore._migrate()` (`admin_store.py`) — no migration framework
@@ -186,7 +190,7 @@ stateDiagram-v2
 | `running` | coordinator claim | →streaming\|retry_wait\|succeeded\|failed\|cancel_requested | no | `started_at` | from retry_wait | →cancel_requested | "Running" | stale lease → queued/failed |
 | `streaming` | provider stream | →running\|succeeded\|cancel_requested | no | — | n/a | →cancel_requested | "Streaming" | treated as running on restart |
 | `retry_wait` | retryable error | →queued\|expired\|cancel_requested | no | — | next attempt | →cancel_requested | "Retry wait" | survives |
-| `cancel_requested` | POST /cancel | →cancelled | no | `cancel_requested_at` | n/a | idempotent | "Cancel requested" | →cancelled on startup |
+| `cancel_requested` | POST /cancel | →cancelled | no | `cancel_requested_at` | n/a | idempotent | "Cancel requested" | non-running requests are finalized by the coordinator; running/streaming waits for later provider-stop integration |
 | `succeeded` | result persisted | — | yes | `completed_at` | n/a | n/a | "Succeeded" | terminal |
 | `failed` | terminal error | — | yes | `completed_at` | operator retry only | n/a | "Failed" | terminal |
 | `cancelled` | stop done | — | yes | `cancelled_at` | n/a | n/a | "Cancelled" | terminal |
@@ -201,6 +205,11 @@ stateDiagram-v2
 - **Crash recovery:** on startup, `running`/`streaming` jobs with stale
   `lease_expires_at` are moved to `queued` (re-queue) if attempts remain,
   else `failed` with `error_code=worker_crash`.
+- **Coordinator polling (Phase 1C.2):** one in-process coordinator runs
+  startup recovery once, promotes due `retry_wait` jobs via the durable
+  repository primitive, finalizes persisted non-running
+  `cancel_requested -> cancelled` jobs, and inspects the next queued job.
+  The production/default coordinator does **not** claim or execute jobs yet.
 - **Stale detection:** a background sweep marks `running` jobs whose
   `lease_expires_at < now`.
 - **Cancellation races:** `cancel_requested` is sticky; if the provider
