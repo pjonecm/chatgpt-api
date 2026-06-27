@@ -16,8 +16,9 @@
 
 ## Phase 1 — Durable Agent Job Foundation (backend)
 
-> **Status: Phase 1A (persistence) implemented.** Phase 1B (HTTP endpoints),
-> the in-process coordinator, and provider execution remain proposed.
+> **Status: Phase 1A (persistence) + Phase 1B (HTTP routes) implemented.**
+> Phase 1C (in-process coordinator, startup recovery wiring, provider
+> execution) remains proposed.
 
 - **Objective:** restart-safe async jobs for text/chat + research.
 - **In scope:**
@@ -29,14 +30,15 @@
   - Idempotency (`Idempotency-Key` header + body key + `request_hash`). **(1A done — header parsing is 1B)**
   - Endpoints: `POST /v1/agent/jobs`, `GET /v1/agent/jobs`, `GET …/{id}`,
     `GET …/{id}/result`, `POST …/{id}/cancel`, `GET …/{id}/events` (JSON,
-    not SSE), `GET …/{id}/artifacts`. **(1B — not started)**
+    not SSE), `GET …/{id}/artifacts`. **(1B done — chat + deep_research only;
+    jobs queue but do not execute)**
   - In-process coordinator (single process; SQLite claim). **(not started)**
   - Reuse `AccountRouter` + `BoundedSemaphore` + `ChatGPTProvider`. **(not started)**
   - Local storage `outputs/agent-jobs/<job_id>/` (request.json, response.json). **(1A: metadata + path only; file writing is later)**
 - **Out of scope:** image/multimodal inputs (Phase 2), SSE streaming,
   callbacks, per-client auth.
 - **Schema changes:** additive tables only (idempotent). **(1A done)**
-- **API changes:** additive `/v1/agent/*`. **(1B — not started)**
+- **API changes:** additive `/v1/agent/*`. **(1B done — see `docs/OPENAI_COMPATIBILITY.md`)**
 - **Tests:** `tests/test_agent_jobs.py` (state machine, idempotency,
   restart recovery, redaction) — synthetic data only. **(1A done — 82 tests)**
 - **Docs:** `docs/OPENAI_COMPATIBILITY.md` add agent routes; **(1B)**

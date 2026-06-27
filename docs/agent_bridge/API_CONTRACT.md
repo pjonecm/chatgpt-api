@@ -1,8 +1,13 @@
 # API Contract — AI Agent → ChatGPT API Bridge
 
-> **Proposed** additive async API. Existing synchronous `/v1/*` routes are
-> unchanged (`docs/OPENAI_COMPATIBILITY.md`). All fields below are proposed
-> unless marked "(existing)". Not the official OpenAI API — "OpenAI-shaped".
+> **Status (2026-06-27): Phase 1B HTTP routes shipped** in
+> `chatgpt_api/api/agent_job_routes.py`, dispatched from `openai_compat.py`.
+> The routes below (`POST /v1/agent/jobs`, list, status, result, events,
+> artifacts, cancel) are implemented for `chat` and `deep_research` only.
+> Jobs progress `accepted → validating → queued` and **do not execute**
+> (Phase 1C). Events are JSON-only (no SSE). Cancellation stops at
+> `cancel_requested`. Existing synchronous `/v1/*` routes are unchanged.
+> Not the official OpenAI API — "OpenAI-shaped".
 
 ## Routes
 

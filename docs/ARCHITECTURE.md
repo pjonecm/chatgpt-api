@@ -171,6 +171,11 @@ ownership boundaries that matter for open-source maintenance:
   state machine, idempotency, canonical request hashing, IDs, redaction, and
   repository operations for jobs/results/events/attempts. No HTTP routes or
   execution coordinator yet (see `docs/agent_bridge/`).
+- `chatgpt_api/api/agent_job_routes.py`: Phase 1B additive `/v1/agent/*`
+  HTTP route service — request validation, normalization, idempotency-header
+  precedence, atomic request-file persistence, safe serializers, and
+  domain→HTTP mapping. The facade (`openai_compat.py`) only authorizes,
+  parses, and dispatches to this service. No coordinator or provider calls.
 - `chatgpt_api/api/openai_compat.py`: route orchestrator, account routing,
   operation cancellation, streaming, admin endpoints, and response shaping.
 

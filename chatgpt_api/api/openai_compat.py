@@ -19,6 +19,8 @@ from typing import Any
 from urllib.parse import parse_qs, quote, urlparse
 
 from chatgpt_api.api.admin_store import BridgeAdminStore
+from chatgpt_api.api.agent_jobs import AgentJobRepository
+from chatgpt_api.api.agent_job_routes import AgentJobRouteService
 from chatgpt_api.api.config import OpenAICompatConfig
 from chatgpt_api.api.http_utils import (
     authorize as _authorize,
@@ -912,6 +914,10 @@ def _handler_class(config: OpenAICompatConfig, router: AccountRouter | None = No
                 status, payload = _get_chatgpt_operation(operation_id)
                 _send_json(self, status, payload)
                 return
+            if path == "/v1/agent/jobs" or path.startswith("/v1/agent/jobs/"):
+                status, payload = _agent_route_service(config).handle_get(path, query)
+                _send_json(self, status, payload)
+                return
             _send_json(self, 404, {"error": {"message": "not found", "type": "not_found"}})
 
         def do_POST(self) -> None:  # noqa: N802
@@ -931,6 +937,23 @@ def _handler_class(config: OpenAICompatConfig, router: AccountRouter | None = No
                     status, payload = _provider_error_status_and_payload(exc)
                 except ValueError as exc:
                     status, payload = 400, {"error": {"message": str(exc), "type": "invalid_request_error"}}
+                _send_json(self, status, payload)
+                return
+            if path == "/v1/agent/jobs" or path.startswith("/v1/agent/jobs/"):
+                if path == "/v1/agent/jobs":
+                    try:
+                        body = _read_json_body(self)
+                    except ValueError as exc:
+                        _send_json(
+                            self,
+                            400,
+                            {"error": {"type": "invalid_request_error", "code": "invalid_request_error", "message": str(exc)}},
+                        )
+                        return
+                else:
+                    body = None
+                idempotency_key = self.headers.get("Idempotency-Key")
+                status, payload = _agent_route_service(config).handle_post(path, body, idempotency_key)
                 _send_json(self, status, payload)
                 return
             if path not in {"/v1/chat/completions", "/v1/images/generations", "/v1/images/edits", "/v1/chatgpt/vision"}:
@@ -2974,6 +2997,18 @@ def _admin_db_path(config: OpenAICompatConfig) -> Path:
 
 def _admin_store(config: OpenAICompatConfig) -> BridgeAdminStore:
     return BridgeAdminStore(_admin_db_path(config))
+
+
+def _agent_route_service(config: OpenAICompatConfig) -> AgentJobRouteService:
+    """Construct a per-request Phase 1B route service.
+
+    The agent-job output root is derived from the admin DB path's parent
+    (``outputs/agent-jobs``), so no new configuration field is required.
+    """
+
+    repo = AgentJobRepository(_admin_store(config))
+    output_root = _admin_db_path(config).parent / "agent-jobs"
+    return AgentJobRouteService(repo, output_root)
 
 
 def _project_root() -> Path:

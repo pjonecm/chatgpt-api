@@ -962,13 +962,14 @@ class AgentJobRepository:
             raise InvalidTransition(
                 f"cannot cancel job in terminal status {job.status!r}"
             )
+        if job.status == STATUS_CANCEL_REQUESTED:
+            # Idempotent: already requested. Must be checked before the
+            # cancellable-status gate below.
+            return job
         if job.status not in CANCELLABLE_STATUSES:
             raise InvalidTransition(
                 f"cannot cancel job in status {job.status!r}"
             )
-        if job.status == STATUS_CANCEL_REQUESTED:
-            # Idempotent: already requested.
-            return job
         with self._connect() as db:
             cursor = db.execute(
                 """

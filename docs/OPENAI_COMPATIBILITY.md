@@ -49,6 +49,40 @@ GET  /v1/chatgpt/operations/{operation_id}
 POST /v1/chatgpt/operations/{operation_id}/cancel
 ```
 
+Phase 1B adds an **additive durable asynchronous Agent Job API** under
+`/v1/agent/*` (see `docs/agent_bridge/`). These routes are OpenAI-shaped in
+error envelope and auth, but are bridge-specific:
+
+```text
+POST /v1/agent/jobs                      submit a durable job (chat | deep_research)
+GET  /v1/agent/jobs                      list/filter/paginate jobs
+GET  /v1/agent/jobs/{job_id}             job status
+GET  /v1/agent/jobs/{job_id}/result      final result (409 pending until Phase 1C)
+GET  /v1/agent/jobs/{job_id}/events      state-transition events (JSON only; no SSE)
+GET  /v1/agent/jobs/{job_id}/artifacts   artifacts associated with the job
+POST /v1/agent/jobs/{job_id}/cancel      persist a cancellation request
+```
+
+Phase 1B status (2026-06-27):
+
+- Only `chat` and `deep_research` submissions are accepted.
+  `image_generation`, `image_edit`, and `vision` are rejected with
+  `400 unsupported_job_type` (deferred to Phase 2).
+- A new job synchronously progresses `accepted → validating → queued` and
+  its normalized request is persisted atomically to
+  `outputs/agent-jobs/<job_id>/request.json`.
+- **Queued jobs are NOT executed.** No coordinator, provider, account
+  router, or concurrency limiter is invoked. Results are unavailable until
+  Phase 1C; `GET .../result` returns `409 pending` for queued jobs.
+- Events are returned as JSON only (no `text/event-stream`).
+- Cancellation stops at `cancel_requested`; it is **not** transitioned to
+  `cancelled` and does not invoke provider cancellation.
+- Idempotency: `Idempotency-Key` header takes precedence over
+  `body.idempotency_key`; same key + same request → `200` (reused), same key
+  + different request → `409 idempotency_conflict`.
+- Same shared Bearer key as all other routes; there is **no agent/operator
+  isolation** (an agent key holder can reach `/v1/chatgpt/admin/*`).
+
 Artifact downloads support both `GET` and `HEAD`. The server can restore a
 download by `file_id` from the admin DB after restart, provided the saved file
 still exists.

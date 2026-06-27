@@ -93,11 +93,18 @@ internet.
 
 ## 5. Agent vs operator access
 
-- **Phase 1 (proposed):** two env vars — `CHATGPT_API_KEY` (operator/admin)
-  and `CHATGPT_AGENT_API_KEY` (agent routes only). Agent key cannot reach
-  `/v1/chatgpt/admin/*`. If `CHATGPT_AGENT_API_KEY` is unset, agent routes
-  fall back to `CHATGPT_API_KEY` (single-key compat) but a startup warning
-  is emitted.
+- **Phase 1B (shipped, 2026-06-27):** the new `/v1/agent/*` routes use the
+  **same shared `CHATGPT_API_KEY`** as every other protected route via the
+  existing `authorize()` gate. There is **no agent/operator isolation** — an
+  agent holding the shared key can still reach `/v1/chatgpt/admin/*`
+  including account-capture management. A separate `CHATGPT_AGENT_API_KEY`
+  is **not implemented** (deferred). Phase 1B deployments must remain
+  private/trusted.
+- **Phase 1 (proposed, not implemented):** two env vars —
+  `CHATGPT_API_KEY` (operator/admin) and `CHATGPT_AGENT_API_KEY` (agent
+  routes only). Agent key cannot reach `/v1/chatgpt/admin/*`. If
+  `CHATGPT_AGENT_API_KEY` is unset, agent routes fall back to
+  `CHATGPT_API_KEY` (single-key compat) but a startup warning is emitted.
 - **UI is never the boundary** — all gating is in `authorize()`-equivalent
   checks on the backend.
 
