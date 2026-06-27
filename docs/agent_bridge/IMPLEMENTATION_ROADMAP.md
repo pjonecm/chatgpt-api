@@ -8,7 +8,7 @@
 
 - **Objective:** confirm a green baseline.
 - **In scope:** `python -m compileall chatgpt_api`; `python -m pytest -q`
-  (expect 188 pass + 1 Windows `0o600` platform failure — documented, not a
+  (expect 371 pass + 1 Windows `0o600` platform failure — documented, not a
   defect); `docker compose config --quiet`; frontend `bun run check`/`build`
   when bun available (NOT RUN otherwise).
 - **Out of scope:** any code change.
@@ -50,12 +50,17 @@
 - **Schema changes:** additive tables only (idempotent). **(1A + 1C.1 done)**
 - **API changes:** additive `/v1/agent/*`. **(1B done — see `docs/OPENAI_COMPATIBILITY.md`)**
 - **Tests:** `tests/test_agent_jobs.py` (state machine, idempotency,
-  retry scheduling/promotion,
-  restart recovery, redaction) — synthetic data only. **(1A done — 82 tests)**
+  retry scheduling/promotion, restart recovery, redaction),
+  `tests/test_agent_job_routes.py`, `tests/test_agent_job_coordinator.py`,
+  `tests/test_agent_job_text_execution.py`, and the relevant
+  `tests/test_openai_compat.py` adapter coverage. Current validated counts:
+  `96`, `58`, `22`, `6`, and `88` passed respectively.
 - **Docs:** `docs/OPENAI_COMPATIBILITY.md` add agent routes; **(1B)**
   `docs/ARCHITECTURE.md` note job layer; **(1A done)** `README.md` snapshot refresh. **(1B — no public behavior change in 1A)**
 - **Acceptance:** a chat job survives a process restart and is retrievable;
-  duplicate idempotency returns the original; redaction verified. **(1A: persistence-level; full restart-recovery is exercised by the recover_stale_jobs primitive + tests. Live restart requires the coordinator, 1B.)**
+  duplicate idempotency returns the original; redaction verified. **(Phase 1A
+  proved the persistence layer; Phase 1C.2/1C.3 add startup recovery,
+  durable retry/cancellation coordination, and non-streaming chat execution.)**
 - **Risks:** `openai_compat.py` blast radius — implement job layer in a new
   module `chatgpt_api/api/agent_jobs.py` wired into the handler, not inlined
   into the 5.6k-line file (clear ownership boundary, tests green —
@@ -141,8 +146,10 @@
 8. Durable job persistence + repository tests.
 9. Job endpoints.
 10. Execution coordinator + restart recovery. **(Phase 1C.2 shipped for
-    lifecycle/recovery/polling only; provider execution deferred)**
+    lifecycle/recovery/polling only; no provider execution in that phase)**
 11. Text execution adapter + non-streaming provider execution.
+    **(Phase 1C.3 complete for `chat` + `stream=false`; `deep_research` and
+    streaming execution remain deferred.)**
 12. Text-job submission UI.
 13. Image/multimodal execution.
 14. Image-related UI.

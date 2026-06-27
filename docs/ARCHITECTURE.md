@@ -169,26 +169,29 @@ ownership boundaries that matter for open-source maintenance:
   operator settings.
 - `chatgpt_api/api/agent_jobs.py`: Phase 1A durable AgentJob persistence —
   state machine, idempotency, canonical request hashing, IDs, redaction, and
-  repository operations for jobs/results/events/attempts, plus coordinator-
-  facing queue selection and non-running cancellation finalization.
+  repository operations for claims, leases, attempts, results, coordinator-
+  facing queue selection, non-running cancellation finalization, and atomic
+  success-result completion that protects the final cancellation race.
 - `chatgpt_api/api/agent_job_routes.py`: Phase 1B additive `/v1/agent/*`
   HTTP route service — request validation, normalization, idempotency-header
   precedence, atomic request-file persistence, safe serializers, and
   domain→HTTP mapping. The facade (`openai_compat.py`) only authorizes,
-  parses, dispatches, and wakes the coordinator after durable queue/cancel
-  writes. No provider calls.
-- `chatgpt_api/api/agent_job_coordinator.py`: Phase 1C.2 in-process
+  parses, dispatches, wakes the coordinator after durable queue/cancel
+  writes, and serves persisted results. No direct provider calls.
+- `chatgpt_api/api/agent_job_coordinator.py`: Phase 1C.3 in-process
   coordinator lifecycle — startup recovery, durable retry promotion polling,
-  non-running cancellation finalization, wake/stop signaling, and the
-  single-active-job execution boundary. Production/default wiring does not
-  claim queued jobs until a real provider executor lands.
+  non-running cancellation finalization, wake/stop signaling, the
+  single-active-job execution boundary, and invocation of the installed
+  eligible-job executor.
 - `chatgpt_api/api/openai_compat.py`: route orchestrator, account routing,
-  operation cancellation, streaming, admin endpoints, response shaping, and
-  server lifecycle wiring for the coordinator.
+  operation cancellation, streaming, admin endpoints, synchronous
+  non-streaming chat integration through the shared adapter, response
+  shaping, and server/coordinator lifecycle wiring.
 - `chatgpt_api/api/text_execution.py`: shared non-streaming text execution
   adapter used by both synchronous `POST /v1/chat/completions` and the Agent
-  Job coordinator, plus safe request/response JSON storage helpers and small
-  retry/backoff utilities.
+  Job coordinator. It reuses the existing provider routing and limiter path
+  via injected runtime callables and also owns safe request/response JSON
+  persistence helpers plus small retry/backoff utilities.
 
 `openai_compat.py` is still intentionally the main facade while routes are
 stabilizing. Future splits should move one domain at a time:

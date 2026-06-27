@@ -2,16 +2,21 @@
 
 > **Status: Phase 1A persistence + Phase 1B HTTP routes implemented,
 > Phase 1C.1 retry persistence primitives implemented, and Phase 1C.2
-> coordinator lifecycle/recovery polling shipped** in
+> coordinator lifecycle/recovery polling shipped, plus Phase 1C.3
+> non-streaming chat execution** in
 > `chatgpt_api/api/agent_jobs.py`,
 > `chatgpt_api/api/agent_job_routes.py`,
 > `chatgpt_api/api/agent_job_coordinator.py`, and
-> `BridgeAdminStore._migrate()` (2026-06-27). The tables, indexes, state
+> `chatgpt_api/api/text_execution.py`, `chatgpt_api/api/openai_compat.py`,
+> and `BridgeAdminStore._migrate()` (2026-06-27). The tables, indexes, state
 > machine, idempotency, claim/lease, recovery sweep, durable `retry_wait`
 > scheduling, due-retry promotion primitives, queued/non-running
-> cancellation finalization, and redaction below are shipped and covered by
-> `tests/test_agent_jobs.py` + `tests/test_agent_job_coordinator.py`.
-> Provider execution and streaming-delta events remain deferred (Phase 1C.3+).
+> cancellation finalization, atomic success-result completion, and redaction
+> below are shipped and covered by
+> `tests/test_agent_jobs.py` + `tests/test_agent_job_coordinator.py` +
+> `tests/test_agent_job_text_execution.py`.
+> Deep Research execution, streaming-delta events, and image/multimodal
+> execution remain deferred.
 >
 > Implemented as idempotent `CREATE TABLE IF NOT EXISTS` in
 > `BridgeAdminStore._migrate()` (`admin_store.py`) — no migration framework
@@ -71,7 +76,9 @@
 - **Retention:** default 7 days after terminal state; configurable.
 - **Write ownership:** job service + coordinator.
 - **Read patterns:** by `job_id`; list by status/type/date cursor.
-- **Phase 1:** yes (minus `priority` enforcement, `callback_*`; coordinator execution remains later).
+- **Phase 1:** yes (minus `priority` enforcement, `callback_*`; `chat`
+  execution is shipped for `stream=false`, while `deep_research` and
+  streaming execution remain later).
 
 ## 2. `job_inputs` (Phase 2 — image/multimodal)
 
@@ -205,21 +212,22 @@ stateDiagram-v2
 - **Crash recovery:** on startup, `running`/`streaming` jobs with stale
   `lease_expires_at` are moved to `queued` (re-queue) if attempts remain,
   else `failed` with `error_code=worker_crash`.
-- **Coordinator polling (Phase 1C.2):** one in-process coordinator runs
-  startup recovery once, promotes due `retry_wait` jobs via the durable
+- **Coordinator polling/execution (Phase 1C.3):** one in-process coordinator
+  runs startup recovery once, promotes due `retry_wait` jobs via the durable
   repository primitive, finalizes persisted non-running
-  `cancel_requested -> cancelled` jobs, and inspects the next queued job.
-  The production/default coordinator does **not** claim or execute jobs yet.
+  `cancel_requested -> cancelled` jobs, selects eligible queued `chat` jobs,
+  claims them, and invokes the installed executor.
+- **Lease settings:** claim duration is 60 seconds and the active executor
+  renews the lease every 15 seconds while provider work is still in flight.
 - **Stale detection:** a background sweep marks `running` jobs whose
   `lease_expires_at < now`.
-- **Cancellation races:** `cancel_requested` is sticky; if the provider
-  completes successfully before the stop takes effect, the job goes
-  `succeeded` (best-effort cancel, consistent with current operation
-  behavior).
-- **Artifact consistency:** artifacts are registered (in `artifacts` table
-  + on disk) **before** the `succeeded` transition commits; the transition
-  and artifact row are in the same logical step so a job never reports
-  success without its artifact row existing.
+- **Cancellation races:** `cancel_requested` is sticky at the durable job
+  level. The executor checks for a persisted running cancellation before
+  committing success, and atomic success completion rejects stale
+  `running -> succeeded` transitions when cancellation wins the race.
+- **Durable result persistence:** successful non-streaming chat execution
+  writes `outputs/agent-jobs/<job_id>/results/response.json`, inserts the
+  corresponding `job_results` row, and only then exposes the result route.
 
 ## Transaction requirements
 
@@ -229,8 +237,9 @@ stateDiagram-v2
 - Retry scheduling is also SQLite-owned: entering `retry_wait` persists
   `next_retry_at`, and due retries are promoted with compare-and-swap
   `retry_wait -> queued` updates instead of in-memory sleeps.
-- Artifact row + final state transition written in one `_connect()` `with`
-  block (SQLite transaction).
+- Final text result insert + `running -> succeeded` transition are written in
+  one `_connect()` `with` block by `complete_job_with_result(...)` so a
+  cancellation race cannot leave a durable success behind.
 - Event inserts are append-only; never updated.
 
 ## Recovery behavior

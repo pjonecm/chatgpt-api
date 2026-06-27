@@ -1,15 +1,16 @@
 # API Contract — AI Agent → ChatGPT API Bridge
 
-> **Status (2026-06-27): Phase 1B HTTP routes shipped** in
+> **Status (2026-06-27): Phase 1C.3 non-streaming chat execution shipped** in
 > `chatgpt_api/api/agent_job_routes.py`, dispatched from `openai_compat.py`.
 > The routes below (`POST /v1/agent/jobs`, list, status, result, events,
 > artifacts, cancel) are implemented for `chat` and `deep_research` only.
-> Jobs progress `accepted → validating → queued` and **do not execute**
-> yet (provider execution is deferred beyond Phase 1C.2). Events are
-> JSON-only (no SSE). The coordinator now finalizes persisted non-running
-> cancellations to `cancelled`, while running/streaming cancellation still
-> waits for later provider-stop integration. Existing synchronous `/v1/*`
-> routes are unchanged.
+> Non-streaming `chat` jobs now execute through the same shared internal
+> text-execution adapter used by synchronous `POST /v1/chat/completions`.
+> Successful chat jobs persist both a durable `job_results` row and
+> `outputs/agent-jobs/<job_id>/results/response.json`. `deep_research`
+> submissions remain accepted but queued for a later phase, events remain
+> JSON-only (no SSE), and running cancellation is still best-effort at the
+> durable job-state level rather than a reliable provider hard-stop.
 > Not the official OpenAI API — "OpenAI-shaped".
 
 ## Routes
@@ -19,7 +20,7 @@ POST   /v1/agent/jobs                      submit a durable job
 GET    /v1/agent/jobs                      list/filter/paginate jobs
 GET    /v1/agent/jobs/{job_id}             job status
 GET    /v1/agent/jobs/{job_id}/result      final result (text/json/image/research)
-GET    /v1/agent/jobs/{job_id}/events      SSE event stream (Phase 3; poll until then)
+GET    /v1/agent/jobs/{job_id}/events      JSON event list (SSE deferred to Phase 3)
 POST   /v1/agent/jobs/{job_id}/cancel      request cancellation
 POST   /v1/agent/jobs/{job_id}/retry       operator-initiated retry (Phase 2)
 GET    /v1/agent/jobs/{job_id}/artifacts   list artifacts for a job
@@ -42,12 +43,12 @@ in Phase 1; agent/operator separation is logical only — see
 
 | Field | Type | Required | Notes |
 | --- | --- | --- | --- |
-| `type` | string | yes | `chat` \| `image_generation` \| `image_edit` \| `vision` \| `deep_research` |
+| `type` | string | yes | `chat` \| `deep_research` in the current shipped route service; image/multimodal job types are deferred |
 | `model` | string | yes | alias from `GET /v1/models` (existing) |
 | `client_request_id` | string | no | caller correlation id |
 | `idempotency_key` | string | no | body equivalent of header; header wins |
-| `priority` | int | no | Phase 2; default 0 |
-| `callback_url` | string | no | Phase 3; disabled/allowlisted by default |
+| `priority` | int | no | deferred; not accepted by the current shipped route service |
+| `callback_url` | string | no | deferred; not accepted by the current shipped route service |
 | `max_attempts` | int | no | default from policy; overrides retry cap |
 | `expires_at` | string | no | ISO8601; job auto-expires after |
 
@@ -64,12 +65,16 @@ in Phase 1; agent/operator separation is logical only — see
 }
 ```
 
-- `messages`: OpenAI-shaped; `content` may be a string or multimodal array
-  (text + `image_url`) — reuses `image_inputs.py` parsing.
-- `stream` (job-level): if `true`, deltas are written to `JobEvent`s and
-  streamable via `/events` (Phase 3) or polled.
+- `messages`: OpenAI-shaped; in the current shipped route service they are
+  validated as string content only.
+- `stream=false`: eligible for Phase 1C.3 coordinator execution.
+- `stream=true`: accepted at submission time but **not supported by the
+  current executor**; the job does not stream and will not produce a
+  successful streaming result in Phase 1C.3.
 
 ### 1.2 Image-generation job
+
+Deferred to Phase 2. Not accepted by the current shipped route service.
 
 ```json
 {
@@ -86,6 +91,8 @@ in Phase 1; agent/operator separation is logical only — see
 - `size`/`aspect_ratio`: existing supported set.
 
 ### 1.3 Multimodal / vision job
+
+Deferred to Phase 2. Not accepted by the current shipped route service.
 
 ```json
 {
@@ -108,6 +115,8 @@ in Phase 1; agent/operator separation is logical only — see
 - Unsupported input → 400 `invalid_request_error`.
 
 ### 1.4 Image-edit job
+
+Deferred to Phase 2. Not accepted by the current shipped route service.
 
 ```json
 {
@@ -178,8 +187,7 @@ in Phase 1; agent/operator separation is logical only — see
   "expires_at": null,
   "result_available": false,
   "artifact_count": 0,
-  "error": null,
-  "progress": {"phase": "streaming", "events": 12}
+  "error": null
 }
 ```
 
@@ -188,7 +196,10 @@ in Phase 1; agent/operator separation is logical only — see
 
 ## 4. Final result — `GET /v1/agent/jobs/{job_id}/result`
 
-- 404 + `not_found` if no result yet; 409 + `pending` if still running.
+- 404 + `not_found` if the job id does not exist.
+- 409 + `pending` if the job has not produced a result yet, including queued
+  and running jobs.
+- 409 + `job_failed` if the job reached `failed` without a stored result.
 - 200 with a type-specific body:
 
 ### Text result
@@ -205,7 +216,12 @@ in Phase 1; agent/operator separation is logical only — see
 }
 ```
 
+- `response` is loaded from the persisted
+  `outputs/agent-jobs/<job_id>/results/response.json` payload.
+
 ### Image result
+
+Future shape once image job execution ships.
 
 ```json
 {
@@ -217,17 +233,23 @@ in Phase 1; agent/operator separation is logical only — see
 
 ### Vision result
 
+Future shape once vision job execution ships.
+
 ```json
 {"job_id": "...", "result_type": "vision", "text": "FW", "response": {...}}
 ```
 
 ### Research result
 
+Future shape once Deep Research Agent Job execution ships.
+
 ```json
 {"job_id": "...", "result_type": "research", "artifacts": [{"file_id": "file_...", "filename": "llm-agi.md", "download_url": "...", "content_type": "text/markdown"}]}
 ```
 
 ### Error result
+
+Illustrative terminal error shape.
 
 ```json
 {"job_id": "...", "result_type": "error", "error": {"code": "chatgpt_auth_or_browser_challenge", "message": "capture expired or rejected"}}
@@ -240,8 +262,10 @@ in Phase 1; agent/operator separation is logical only — see
   (`accepted`, `validating`, `queued`, `retry_wait`), the in-process
   coordinator finalizes `cancel_requested → cancelled` without contacting the
   provider.
-- For jobs cancelled while provider work is running/streaming, durable status
-  remains `cancel_requested` until later provider-stop integration lands.
+- Running cancellation is currently best-effort at the durable job-state
+  level. The cancellation request is persisted, and a cancellation that wins
+  the final state transition prevents success result persistence. The
+  underlying provider request is not yet reliably interrupted in flight.
 - 409 if already terminal (except `cancelled` → 200).
 - Returns the updated status.
 

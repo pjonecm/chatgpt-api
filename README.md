@@ -86,6 +86,7 @@ downloads, and developer tooling.
 | Image edit / composite | `POST /v1/images/edits` | implemented, one output image |
 | OCR / describe up to 10 images | `POST /v1/chatgpt/vision` | implemented |
 | Deep Research report export | `chatgpt-deep-research` model alias | implemented |
+| Durable Agent Jobs | `/v1/agent/jobs/*` | implemented for non-streaming `chat`; `deep_research` accepted but still deferred |
 | File downloads | `GET/HEAD /v1/chatgpt/files/{id}/{filename}` | implemented |
 | Account usage and limits | `GET /v1/chatgpt/usage` | implemented when ChatGPT reports data |
 | opencode consumer config | `integrations/opencode/*` | implemented |
@@ -601,6 +602,13 @@ required pieces are missing.
 | `GET /v1/models` | Models and bridge aliases visible to the current route. |
 | `GET /v1/chatgpt/usage` | Live per-account usage and quota metadata when ChatGPT reports it. |
 | `POST /v1/chat/completions` | Chat, streaming chat, tool-call bridge, chat-triggered images, and Deep Research. |
+| `POST /v1/agent/jobs` | Submit a durable Agent Job. Non-streaming `chat` jobs execute; `deep_research` jobs are accepted but remain deferred. |
+| `GET /v1/agent/jobs` | List and filter durable Agent Jobs. |
+| `GET /v1/agent/jobs/{job_id}` | Inspect durable Agent Job status, attempts, timestamps, and error state. |
+| `GET /v1/agent/jobs/{job_id}/result` | Read the persisted final result. Queued/running jobs return `409 pending`. |
+| `GET /v1/agent/jobs/{job_id}/events` | Read JSON state-transition events. SSE is not shipped yet. |
+| `GET /v1/agent/jobs/{job_id}/artifacts` | List artifacts associated with a durable job. |
+| `POST /v1/agent/jobs/{job_id}/cancel` | Persist a cancellation request. Running cancellation is durable but does not reliably hard-stop the provider request yet. |
 | `POST /v1/images/generations` | Generate one completed image and save it. |
 | `POST /v1/images/edits` | Upload source image(s), edit or composite them, and save one completed image. |
 | `POST /v1/chatgpt/vision` | OCR, describe, or custom vision prompt for up to 10 input images. |
@@ -610,6 +618,15 @@ required pieces are missing.
 | `/v1/chatgpt/admin/*` | Local operator routes used by the console and CLI. |
 
 Full route details: [docs/OPENAI_COMPATIBILITY.md](docs/OPENAI_COMPATIBILITY.md)
+
+Agent Job details and limits: [docs/agent_bridge/API_CONTRACT.md](docs/agent_bridge/API_CONTRACT.md)
+
+The Agent Job API is still local and unofficial. It uses the same shared
+Bearer key as the rest of the bridge, so there is no separate Agent API key
+or operator isolation yet. In Phase 1C.3, `type=chat` with `stream=false`
+executes durably and survives restart when the SQLite DB plus output files
+persist. `deep_research` jobs are accepted but not yet executed, and
+`stream=true` Agent Jobs are not yet supported by the executor.
 
 ## Chat Example
 

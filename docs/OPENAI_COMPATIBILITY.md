@@ -82,13 +82,15 @@ Phase 1C.3 status (2026-06-27):
   jobs still return `409 pending`.
 - `deep_research` jobs remain accepted and durable but are still deferred for
   execution in a later phase, so they remain queued until that executor lands.
+- `stream=true` Agent Jobs are not supported by the current executor; Phase
+  1C.3 only executes `type=chat` with `stream=false`.
 - Events are returned as JSON only (no `text/event-stream`).
 - Non-running cancellations (`accepted`, `validating`, `queued`,
   `retry_wait`) are finalized asynchronously to `cancelled` by the
-  coordinator without provider interaction. Running/streaming cancellation
-  still does not invoke provider cancellation in this phase, but the durable
-  job state now prevents a cancelled run from saving a success result after
-  cancellation wins the race.
+  coordinator without provider interaction. Running cancellation is currently
+  best-effort at the durable job-state level: the request is persisted, a
+  cancellation that wins prevents success result persistence, and the
+  underlying provider request is not yet reliably interrupted in flight.
 - Idempotency: `Idempotency-Key` header takes precedence over
   `body.idempotency_key`; same key + same request → `200` (reused), same key
   + different request → `409 idempotency_conflict`.
