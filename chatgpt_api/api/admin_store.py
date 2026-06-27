@@ -60,7 +60,106 @@ class BridgeAdminStore:
                     value_json TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
+
+                -- Phase 1A: durable Agent Job persistence. Additive only;
+                -- see docs/agent_bridge/DATA_MODEL.md. No foreign-key
+                -- constraints are declared, matching the existing schema
+                -- style (artifacts/account_captures have no FKs either).
+                CREATE TABLE IF NOT EXISTS agent_jobs (
+                    job_id TEXT PRIMARY KEY,
+                    client_request_id TEXT,
+                    idempotency_key TEXT,
+                    request_hash TEXT,
+                    request_type TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    priority INTEGER NOT NULL DEFAULT 0,
+                    model TEXT NOT NULL,
+                    account_alias TEXT,
+                    request_storage_key TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    queued_at TEXT,
+                    started_at TEXT,
+                    completed_at TEXT,
+                    cancel_requested_at TEXT,
+                    cancelled_at TEXT,
+                    expires_at TEXT,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    max_attempts INTEGER NOT NULL,
+                    error_code TEXT,
+                    error_message TEXT,
+                    result_id TEXT,
+                    callback_url TEXT,
+                    callback_status TEXT,
+                    lease_owner TEXT,
+                    lease_expires_at TEXT
+                );
+
+                CREATE INDEX IF NOT EXISTS agent_jobs_status_idx
+                    ON agent_jobs(status);
+                CREATE INDEX IF NOT EXISTS agent_jobs_created_idx
+                    ON agent_jobs(created_at DESC);
+                CREATE INDEX IF NOT EXISTS agent_jobs_client_idx
+                    ON agent_jobs(client_request_id);
+                -- Partial unique index: one active job per non-null
+                -- idempotency key. This is the final race-safety mechanism
+                -- for concurrent same-key submissions.
+                CREATE UNIQUE INDEX IF NOT EXISTS agent_jobs_idem_idx
+                    ON agent_jobs(idempotency_key)
+                    WHERE idempotency_key IS NOT NULL;
+
+                CREATE TABLE IF NOT EXISTS job_results (
+                    result_id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL UNIQUE,
+                    result_type TEXT NOT NULL,
+                    text_content TEXT,
+                    response_storage_key TEXT,
+                    model TEXT,
+                    account_alias TEXT,
+                    finish_reason TEXT,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS job_events (
+                    event_id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL,
+                    sequence_no INTEGER NOT NULL,
+                    event_type TEXT NOT NULL,
+                    event_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS job_events_job_seq_idx
+                    ON job_events(job_id, sequence_no);
+                CREATE INDEX IF NOT EXISTS job_events_job_idx
+                    ON job_events(job_id, sequence_no);
+
+                CREATE TABLE IF NOT EXISTS job_attempts (
+                    attempt_id TEXT PRIMARY KEY,
+                    job_id TEXT NOT NULL,
+                    attempt_no INTEGER NOT NULL,
+                    account_alias TEXT,
+                    provider TEXT NOT NULL,
+                    started_at TEXT NOT NULL,
+                    completed_at TEXT,
+                    status TEXT NOT NULL,
+                    error_code TEXT,
+                    error_message TEXT
+                );
+
+                CREATE UNIQUE INDEX IF NOT EXISTS job_attempts_job_no_idx
+                    ON job_attempts(job_id, attempt_no);
+                CREATE INDEX IF NOT EXISTS job_attempts_job_idx
+                    ON job_attempts(job_id, attempt_no);
                 """
+            )
+            # CREATE TABLE IF NOT EXISTS cannot add a column to an existing
+            # table, so add artifacts.job_id idempotently via introspection.
+            # Never destroys or rewrites existing rows.
+            existing_columns = {row["name"] for row in db.execute("PRAGMA table_info(artifacts)").fetchall()}
+            if "job_id" not in existing_columns:
+                db.execute("ALTER TABLE artifacts ADD COLUMN job_id TEXT")
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS artifacts_job_idx ON artifacts(job_id)"
             )
 
     def record_artifact(
@@ -71,17 +170,18 @@ class BridgeAdminStore:
         account: str | None = None,
         prompt: str | None = None,
         metadata: dict[str, Any] | None = None,
+        job_id: str | None = None,
     ) -> None:
         with self._connect() as db:
             db.execute(
                 """
                 INSERT OR REPLACE INTO artifacts (
                     file_id, kind, filename, path, download_url, content_type, bytes,
-                    account, prompt, metadata_json, created_at
+                    account, prompt, metadata_json, created_at, job_id
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(
                     (SELECT created_at FROM artifacts WHERE file_id = ?),
                     ?
-                ))
+                ), ?)
                 """,
                 (
                     str(asset.get("id") or ""),
@@ -96,6 +196,7 @@ class BridgeAdminStore:
                     json.dumps(metadata or {}, ensure_ascii=False, sort_keys=True),
                     str(asset.get("id") or ""),
                     utc_now(),
+                    job_id,
                 ),
             )
 
@@ -116,6 +217,25 @@ class BridgeAdminStore:
         with self._connect() as db:
             row = db.execute("SELECT * FROM artifacts WHERE file_id = ?", (file_id,)).fetchone()
         return self._artifact_row(row) if row is not None else None
+
+    def list_artifacts_by_job(self, job_id: str, *, limit: int = 100) -> list[dict[str, Any]]:
+        """List artifacts associated with an AgentJob (Phase 1A).
+
+        Rows with ``job_id IS NULL`` (legacy synchronous-flow artifacts) are
+        not returned. Missing files are pruned, matching ``list_artifacts``.
+        """
+
+        safe_limit = max(1, min(int(limit), 500))
+        with self._connect() as db:
+            rows = db.execute(
+                "SELECT * FROM artifacts WHERE job_id = ? ORDER BY created_at DESC LIMIT ?",
+                (job_id, safe_limit * 4),
+            ).fetchall()
+        artifacts = [self._artifact_row(row) for row in rows]
+        stale_ids = [artifact["file_id"] for artifact in artifacts if not artifact["exists"]]
+        if stale_ids:
+            self.delete_artifacts(stale_ids)
+        return [artifact for artifact in artifacts if artifact["exists"]][:safe_limit]
 
     def artifact_count(self) -> int:
         with self._connect() as db:
@@ -218,6 +338,7 @@ class BridgeAdminStore:
             "prompt": row["prompt"],
             "metadata": _json_or_empty(row["metadata_json"]),
             "created_at": row["created_at"],
+            "job_id": row["job_id"],
             "exists": Path(row["path"]).is_file(),
         }
 

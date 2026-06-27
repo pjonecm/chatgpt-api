@@ -167,6 +167,10 @@ ownership boundaries that matter for open-source maintenance:
   multimodal content-part parsing for OCR, image edit, and composite requests.
 - `chatgpt_api/api/admin_store.py`: SQLite metadata for artifacts and persisted
   operator settings.
+- `chatgpt_api/api/agent_jobs.py`: Phase 1A durable AgentJob persistence —
+  state machine, idempotency, canonical request hashing, IDs, redaction, and
+  repository operations for jobs/results/events/attempts. No HTTP routes or
+  execution coordinator yet (see `docs/agent_bridge/`).
 - `chatgpt_api/api/openai_compat.py`: route orchestrator, account routing,
   operation cancellation, streaming, admin endpoints, and response shaping.
 
