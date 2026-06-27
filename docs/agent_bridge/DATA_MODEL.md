@@ -1,11 +1,13 @@
 # Data Model — AI Agent → ChatGPT API Bridge
 
-> **Status: Phase 1A persistence implemented** in `chatgpt_api/api/agent_jobs.py`
-> + `BridgeAdminStore._migrate()` (2026-06-27). The tables, indexes, state
-> machine, idempotency, claim/lease, recovery sweep, and redaction below are
-> shipped and covered by `tests/test_agent_jobs.py` (82 tests). HTTP routes,
-> the execution coordinator, provider calls, and streaming-delta events
-> remain proposed (Phase 1B+).
+> **Status: Phase 1A persistence + Phase 1B HTTP routes implemented, and
+> Phase 1C.1 retry persistence primitives implemented** in
+> `chatgpt_api/api/agent_jobs.py` + `BridgeAdminStore._migrate()`
+> (2026-06-27). The tables, indexes, state machine, idempotency, claim/lease,
+> recovery sweep, durable `retry_wait` scheduling, due-retry promotion
+> primitives, and redaction below are shipped and covered by
+> `tests/test_agent_jobs.py`. The execution coordinator, provider calls, and
+> streaming-delta events remain proposed (Phase 1C.2+).
 >
 > Implemented as idempotent `CREATE TABLE IF NOT EXISTS` in
 > `BridgeAdminStore._migrate()` (`admin_store.py`) — no migration framework
@@ -54,16 +56,18 @@
 | `callback_status` | TEXT | opt | Phase 3 |
 | `lease_owner` | TEXT | opt | process id (Phase 1 restart recovery) |
 | `lease_expires_at` | TEXT | opt | heartbeat deadline |
+| `next_retry_at` | TEXT | opt | durable retry deadline while `status=retry_wait` |
 
 - **Indexes:** `agent_jobs_status_idx (status)`,
   `agent_jobs_created_idx (created_at DESC)`,
   `agent_jobs_idem_idx (idempotency_key)` (unique where present),
-  `agent_jobs_client_idx (client_request_id)`.
+  `agent_jobs_client_idx (client_request_id)`,
+  `agent_jobs_retry_idx (status, next_retry_at)`.
 - **Unique:** partial unique on `idempotency_key` (one active job per key).
 - **Retention:** default 7 days after terminal state; configurable.
 - **Write ownership:** job service + coordinator.
 - **Read patterns:** by `job_id`; list by status/type/date cursor.
-- **Phase 1:** yes (minus `priority` enforcement, `callback_*`).
+- **Phase 1:** yes (minus `priority` enforcement, `callback_*`; coordinator execution remains later).
 
 ## 2. `job_inputs` (Phase 2 — image/multimodal)
 
@@ -213,6 +217,9 @@ stateDiagram-v2
 - Job state transitions are single-statement `UPDATE … WHERE job_id=? AND
   status=?` (compare-and-swap) to avoid races between coordinator, cancel,
   and sweep.
+- Retry scheduling is also SQLite-owned: entering `retry_wait` persists
+  `next_retry_at`, and due retries are promoted with compare-and-swap
+  `retry_wait -> queued` updates instead of in-memory sleeps.
 - Artifact row + final state transition written in one `_connect()` `with`
   block (SQLite transaction).
 - Event inserts are append-only; never updated.

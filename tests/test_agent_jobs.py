@@ -73,6 +73,48 @@ def _index_names(db_path: Path) -> set[str]:
         return {row[1] for row in conn.execute("PRAGMA index_list(agent_jobs)").fetchall()}
 
 
+def _create_phase1a_agent_jobs_table(db_path: Path) -> None:
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE agent_jobs (
+                job_id TEXT PRIMARY KEY,
+                client_request_id TEXT,
+                idempotency_key TEXT,
+                request_hash TEXT,
+                request_type TEXT NOT NULL,
+                status TEXT NOT NULL,
+                priority INTEGER NOT NULL DEFAULT 0,
+                model TEXT NOT NULL,
+                account_alias TEXT,
+                request_storage_key TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                queued_at TEXT,
+                started_at TEXT,
+                completed_at TEXT,
+                cancel_requested_at TEXT,
+                cancelled_at TEXT,
+                expires_at TEXT,
+                attempt_count INTEGER NOT NULL DEFAULT 0,
+                max_attempts INTEGER NOT NULL,
+                error_code TEXT,
+                error_message TEXT,
+                result_id TEXT,
+                callback_url TEXT,
+                callback_status TEXT,
+                lease_owner TEXT,
+                lease_expires_at TEXT
+            );
+            CREATE INDEX agent_jobs_status_idx ON agent_jobs(status);
+            CREATE INDEX agent_jobs_created_idx ON agent_jobs(created_at DESC);
+            CREATE INDEX agent_jobs_client_idx ON agent_jobs(client_request_id);
+            CREATE UNIQUE INDEX agent_jobs_idem_idx
+                ON agent_jobs(idempotency_key)
+                WHERE idempotency_key IS NOT NULL;
+            """
+        )
+
+
 def test_migration_creates_all_phase1a_tables(tmp_path):
     store = _store(tmp_path)
     db_path = store.path
@@ -100,6 +142,7 @@ def test_migration_creates_required_indexes(tmp_path):
     assert "agent_jobs_created_idx" in idx
     assert "agent_jobs_client_idx" in idx
     assert "agent_jobs_idem_idx" in idx
+    assert "agent_jobs_retry_idx" in idx
 
 
 def test_migration_is_idempotent(tmp_path):
@@ -113,6 +156,43 @@ def test_migration_is_idempotent(tmp_path):
     # No duplicate job_id column somehow appeared.
     cols = _table_columns(db_path, "artifacts")
     assert list(cols).count("job_id") == 1
+
+
+def test_existing_database_gains_next_retry_at_column(tmp_path):
+    db_path = tmp_path / "admin.sqlite"
+    _create_phase1a_agent_jobs_table(db_path)
+    BridgeAdminStore(db_path)
+    assert "next_retry_at" in _table_columns(db_path, "agent_jobs")
+
+
+def test_retry_migration_is_idempotent(tmp_path):
+    db_path = tmp_path / "admin.sqlite"
+    _create_phase1a_agent_jobs_table(db_path)
+    BridgeAdminStore(db_path)
+    BridgeAdminStore(db_path)
+    BridgeAdminStore(db_path)
+    cols = _table_columns(db_path, "agent_jobs")
+    assert list(cols).count("next_retry_at") == 1
+    assert "agent_jobs_retry_idx" in _index_names(db_path)
+
+
+def test_existing_agent_job_rows_remain_valid_after_retry_migration(tmp_path):
+    db_path = tmp_path / "admin.sqlite"
+    _create_phase1a_agent_jobs_table(db_path)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO agent_jobs (
+                job_id, request_type, status, model, request_storage_key,
+                created_at, attempt_count, max_attempts
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("job_legacy", "chat", STATUS_QUEUED, "auto", "agent-jobs/job_legacy/request.json", T0, 0, 3),
+        )
+    repo = AgentJobRepository(BridgeAdminStore(db_path))
+    job = repo.get_job("job_legacy")
+    assert job.status == STATUS_QUEUED
+    assert job.next_retry_at is None
 
 
 def test_legacy_artifacts_gains_job_id_column(tmp_path):
@@ -766,6 +846,158 @@ def test_recovery_sweep_twice_is_idempotent(tmp_path):
     assert first.requeued == [job_id]
     assert second.requeued == []
     assert second.failed == []
+
+
+# --------------------------------------------------------------------------- #
+# Retry scheduling tests
+# --------------------------------------------------------------------------- #
+
+
+def test_retry_wait_stores_next_retry_at(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    job = repo.schedule_retry(
+        job_id,
+        expected=STATUS_RUNNING,
+        next_retry_at=T4,
+        error_code="chatgpt_rate_limited",
+        error_message="retry later",
+        now=T2,
+    )
+    assert job.status == STATUS_RETRY_WAIT
+    assert job.next_retry_at == T4
+
+
+def test_lease_fields_clear_when_scheduling_retry(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    job = repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T4, now=T2)
+    assert job.lease_owner is None
+    assert job.lease_expires_at is None
+
+
+def test_due_retry_returns_to_queued(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T2, now=T1)
+    promoted = repo.promote_due_retries(now=T3)
+    job = repo.get_job(job_id)
+    assert promoted == [job_id]
+    assert job.status == STATUS_QUEUED
+    assert job.queued_at == T3
+
+
+def test_non_due_retry_remains_waiting(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T_FUTURE, now=T2)
+    promoted = repo.promote_due_retries(now=T3)
+    job = repo.get_job(job_id)
+    assert promoted == []
+    assert job.status == STATUS_RETRY_WAIT
+    assert job.next_retry_at == T_FUTURE
+
+
+def test_due_retry_promotion_compare_and_swap_safe(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T2, now=T1)
+    barrier = threading.Barrier(2)
+    outcomes: list[list[str]] = []
+
+    def promote():
+        barrier.wait()
+        outcomes.append(repo.promote_due_retries(now=T3))
+
+    threads = [threading.Thread(target=promote) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    promoted_count = sum(job_id in ids for ids in outcomes)
+    assert promoted_count == 1
+    assert repo.get_job(job_id).status == STATUS_QUEUED
+
+
+def test_second_retry_promotion_pass_is_idempotent(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T2, now=T1)
+    first = repo.promote_due_retries(now=T3)
+    second = repo.promote_due_retries(now=T4)
+    assert first == [job_id]
+    assert second == []
+
+
+def test_retry_timing_survives_repository_recreation(tmp_path):
+    store = _store(tmp_path)
+    repo = AgentJobRepository(store)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T4, now=T2)
+    reopened = AgentJobRepository(BridgeAdminStore(store.path))
+    job = reopened.get_job(job_id)
+    assert job.status == STATUS_RETRY_WAIT
+    assert job.next_retry_at == T4
+
+
+def test_terminal_jobs_are_never_promoted_by_retry_worker(tmp_path):
+    db_path = _store(tmp_path).path
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            """
+            INSERT INTO agent_jobs (
+                job_id, request_type, status, model, request_storage_key,
+                created_at, attempt_count, max_attempts, next_retry_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            ("job_terminal", "chat", STATUS_FAILED, "auto", "agent-jobs/job_terminal/request.json", T0, 1, 3, T1),
+        )
+    repo = AgentJobRepository(BridgeAdminStore(db_path))
+    promoted = repo.promote_due_retries(now=T3)
+    job = repo.get_job("job_terminal")
+    assert promoted == []
+    assert job.status == STATUS_FAILED
+    assert job.next_retry_at == T1
+
+
+def test_retry_events_are_appended(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    before = len(repo.list_events(job_id))
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T2, now=T1)
+    repo.promote_due_retries(now=T3)
+    events = repo.list_events(job_id)
+    event_types = [event.event_type for event in events]
+    assert len(events) == before + 2
+    assert event_types[-2:] == ["retry_scheduled", "retry_promoted"]
+
+
+def test_next_retry_at_clears_after_promotion(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T2, now=T1)
+    repo.promote_due_retries(now=T3)
+    assert repo.get_job(job_id).next_retry_at is None
+
+
+def test_leaving_retry_wait_clears_next_retry_at(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _create_job_at(repo, STATUS_QUEUED, tmp_path)
+    repo.claim_job(job_id, lease_owner="w1", lease_expires_at=T_FUTURE, now=T1)
+    repo.schedule_retry(job_id, expected=STATUS_RUNNING, next_retry_at=T4, now=T2)
+    job = repo.transition(job_id, target=STATUS_CANCEL_REQUESTED, expected=STATUS_RETRY_WAIT, now=T3)
+    assert job.status == STATUS_CANCEL_REQUESTED
+    assert job.next_retry_at is None
 
 
 # --------------------------------------------------------------------------- #

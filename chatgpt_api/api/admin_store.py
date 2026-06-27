@@ -91,7 +91,8 @@ class BridgeAdminStore:
                     callback_url TEXT,
                     callback_status TEXT,
                     lease_owner TEXT,
-                    lease_expires_at TEXT
+                    lease_expires_at TEXT,
+                    next_retry_at TEXT
                 );
 
                 CREATE INDEX IF NOT EXISTS agent_jobs_status_idx
@@ -160,6 +161,16 @@ class BridgeAdminStore:
                 db.execute("ALTER TABLE artifacts ADD COLUMN job_id TEXT")
             db.execute(
                 "CREATE INDEX IF NOT EXISTS artifacts_job_idx ON artifacts(job_id)"
+            )
+            # Phase 1C.1: add agent_jobs.next_retry_at idempotently for
+            # databases created under Phase 1A (which lack the column). The
+            # retry index is created after this ALTER so the column exists in
+            # both fresh and legacy databases.
+            agent_columns = {row["name"] for row in db.execute("PRAGMA table_info(agent_jobs)").fetchall()}
+            if "next_retry_at" not in agent_columns:
+                db.execute("ALTER TABLE agent_jobs ADD COLUMN next_retry_at TEXT")
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS agent_jobs_retry_idx ON agent_jobs(status, next_retry_at)"
             )
 
     def record_artifact(

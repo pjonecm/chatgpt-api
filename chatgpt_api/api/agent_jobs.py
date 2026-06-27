@@ -164,6 +164,7 @@ class AgentJob:
     callback_status: str | None = None
     lease_owner: str | None = None
     lease_expires_at: str | None = None
+    next_retry_at: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -377,6 +378,7 @@ class AgentJobRepository:
             callback_status=row["callback_status"],
             lease_owner=row["lease_owner"],
             lease_expires_at=row["lease_expires_at"],
+            next_retry_at=row["next_retry_at"],
         )
 
     @staticmethod
@@ -691,6 +693,10 @@ class AgentJobRepository:
         if expected in ACTIVE_EXECUTION_STATUSES and target not in ACTIVE_EXECUTION_STATUSES:
             set_clauses.append("lease_owner = NULL")
             set_clauses.append("lease_expires_at = NULL")
+        # Clear the scheduled retry time when leaving retry_wait so a
+        # re-queued or cancelled job does not carry a stale next_retry_at.
+        if expected == STATUS_RETRY_WAIT and target != STATUS_RETRY_WAIT:
+            set_clauses.append("next_retry_at = NULL")
 
         params.extend([job_id, expected])
         sql = (
@@ -723,6 +729,134 @@ class AgentJobRepository:
                 now=now,
             )
         return self.get_job(job_id)
+
+    # -- retry scheduling (Phase 1C.1) -------------------------------------- #
+
+    def schedule_retry(
+        self,
+        job_id: str,
+        *,
+        next_retry_at: str,
+        error_code: str | None = None,
+        error_message: Any = None,
+        expected: str = STATUS_RUNNING,
+        now: str | None = None,
+    ) -> AgentJob:
+        """Transition an executing job into ``retry_wait`` with a durable
+        ``next_retry_at``.
+
+        ``running``/``streaming -> retry_wait``. Clears lease fields (the job
+        is no longer executing), persists the retry deadline (the retry
+        authority is SQLite, not an in-memory sleep), and appends a
+        ``retry_scheduled`` event. Compare-and-swap on ``expected`` status.
+
+        The coordinator (Phase 1C.2+) later calls ``promote_due_retries`` to
+        move due jobs ``retry_wait -> queued``.
+        """
+
+        validate_transition(expected, STATUS_RETRY_WAIT)
+        now = now or utc_now()
+        safe_message = sanitize_error(error_message, code=error_code) if error_message else None
+
+        set_clauses = [
+            "status = ?",
+            "next_retry_at = ?",
+            "lease_owner = NULL",
+            "lease_expires_at = NULL",
+        ]
+        params: list[Any] = [STATUS_RETRY_WAIT, next_retry_at]
+        if error_code is not None:
+            set_clauses.append("error_code = ?")
+            params.append(error_code)
+        if safe_message is not None:
+            set_clauses.append("error_message = ?")
+            params.append(safe_message)
+        params.extend([job_id, expected])
+        sql = "UPDATE agent_jobs SET " + ", ".join(set_clauses) + " WHERE job_id = ? AND status = ?"
+
+        with self._connect() as db:
+            cursor = db.execute(sql, params)
+            if cursor.rowcount == 0:
+                existing = db.execute(
+                    "SELECT status FROM agent_jobs WHERE job_id = ?", (job_id,)
+                ).fetchone()
+                if existing is None:
+                    raise JobNotFound(f"job not found: {job_id}")
+                raise InvalidTransition(
+                    f"retry schedule lost the race (job {job_id} is now {existing['status']!r})"
+                )
+            self._append_event(
+                db,
+                job_id=job_id,
+                event_type="retry_scheduled",
+                payload={
+                    "from": expected,
+                    "to": STATUS_RETRY_WAIT,
+                    "error_code": error_code,
+                    "next_retry_at": next_retry_at,
+                },
+                now=now,
+            )
+        return self.get_job(job_id)
+
+    def promote_due_retries(self, *, now: str | None = None, limit: int = 100) -> list[str]:
+        """Atomically transition due ``retry_wait`` jobs to ``queued``.
+
+        A job is due when ``status = retry_wait`` and
+        ``next_retry_at IS NOT NULL AND next_retry_at <= now``. Each promotion
+        is a compare-and-swap ``UPDATE ... WHERE status = retry_wait AND
+        next_retry_at <= now`` so non-due jobs are untouched and two
+        concurrent promoters cannot both claim the same job. Clears
+        ``next_retry_at``/``error_code``/``error_message`` and sets
+        ``queued_at``.
+
+        Returns the list of promoted job ids. Idempotent: a second pass finds
+        those jobs no longer in ``retry_wait``. Terminal jobs are never in
+        ``retry_wait`` and are never promoted. No provider is invoked.
+        """
+
+        now = now or utc_now()
+        safe_limit = max(1, min(int(limit), 500))
+        promoted: list[str] = []
+        with self._connect() as db:
+            due = db.execute(
+                """
+                SELECT job_id FROM agent_jobs
+                WHERE status = ?
+                  AND next_retry_at IS NOT NULL
+                  AND next_retry_at <= ?
+                ORDER BY next_retry_at ASC
+                LIMIT ?
+                """,
+                (STATUS_RETRY_WAIT, now, safe_limit),
+            ).fetchall()
+            for row in due:
+                job_id = row["job_id"]
+                cursor = db.execute(
+                    """
+                    UPDATE agent_jobs
+                    SET status = ?,
+                        queued_at = ?,
+                        next_retry_at = NULL,
+                        error_code = NULL,
+                        error_message = NULL
+                    WHERE job_id = ?
+                      AND status = ?
+                      AND next_retry_at IS NOT NULL
+                      AND next_retry_at <= ?
+                    """,
+                    (STATUS_QUEUED, now, job_id, STATUS_RETRY_WAIT, now),
+                )
+                if cursor.rowcount == 1:
+                    self._append_event(
+                        db,
+                        job_id=job_id,
+                        event_type="retry_promoted",
+                        payload={"from": STATUS_RETRY_WAIT, "to": STATUS_QUEUED},
+                        now=now,
+                    )
+                    promoted.append(job_id)
+        return promoted
 
     # -- events -------------------------------------------------------------- #
 
@@ -1189,5 +1323,6 @@ _SAFE_EVENT_KEYS = frozenset(
         "provider",
         "error_code",
         "result_type",
+        "next_retry_at",
     }
 )

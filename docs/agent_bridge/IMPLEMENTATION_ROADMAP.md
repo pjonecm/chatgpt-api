@@ -17,7 +17,8 @@
 ## Phase 1 — Durable Agent Job Foundation (backend)
 
 > **Status: Phase 1A (persistence) + Phase 1B (HTTP routes) implemented.**
-> Phase 1C (in-process coordinator, startup recovery wiring, provider
+> **Phase 1C.1 (retry schema + repository primitives) implemented.**
+> Phase 1C.2+ (in-process coordinator, startup recovery wiring, provider
 > execution) remains proposed.
 
 - **Objective:** restart-safe async jobs for text/chat + research.
@@ -26,6 +27,8 @@
     transitions), `job_attempts`; add nullable `job_id` to `artifacts`. **(1A done)**
   - Repository methods on `BridgeAdminStore` (compare-and-swap transitions,
     claim, list with cursor, summary). **(1A done)**
+  - Durable retry scheduling primitives: `next_retry_at` migration,
+    `retry_wait` persistence, due-retry promotion, retry events. **(1C.1 done)**
   - State machine + restart-recovery sweep (stale lease → re-queue/fail). **(1A done)**
   - Idempotency (`Idempotency-Key` header + body key + `request_hash`). **(1A done — header parsing is 1B)**
   - Endpoints: `POST /v1/agent/jobs`, `GET /v1/agent/jobs`, `GET …/{id}`,
@@ -37,9 +40,10 @@
   - Local storage `outputs/agent-jobs/<job_id>/` (request.json, response.json). **(1A: metadata + path only; file writing is later)**
 - **Out of scope:** image/multimodal inputs (Phase 2), SSE streaming,
   callbacks, per-client auth.
-- **Schema changes:** additive tables only (idempotent). **(1A done)**
+- **Schema changes:** additive tables only (idempotent). **(1A + 1C.1 done)**
 - **API changes:** additive `/v1/agent/*`. **(1B done — see `docs/OPENAI_COMPATIBILITY.md`)**
 - **Tests:** `tests/test_agent_jobs.py` (state machine, idempotency,
+  retry scheduling/promotion,
   restart recovery, redaction) — synthetic data only. **(1A done — 82 tests)**
 - **Docs:** `docs/OPENAI_COMPATIBILITY.md` add agent routes; **(1B)**
   `docs/ARCHITECTURE.md` note job layer; **(1A done)** `README.md` snapshot refresh. **(1B — no public behavior change in 1A)**
