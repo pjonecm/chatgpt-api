@@ -1,13 +1,13 @@
 # Decisions (ADRs) — AI Agent → ChatGPT API Bridge
 
-> Status: **Proposed** for all. Grounded in repository evidence on
-> 2026-06-27.
+> Statuses updated on 2026-06-28 after Phase 1C.4. Implemented decisions are
+> reflected in code; deferred decisions remain design intent only.
 
 ---
 
 ## ADR-AGENT-001: Hybrid synchronous + asynchronous API
 
-Status: Proposed
+Status: Implemented
 
 ### Context
 
@@ -43,7 +43,7 @@ unchanged; add a **new, additive** `/v1/agent/*` durable job API.
 
 ## ADR-AGENT-002: SQLite-backed Phase 1 persistence
 
-Status: Proposed
+Status: Implemented
 
 ### Context
 
@@ -75,7 +75,7 @@ SQLite admin DB, extending `_migrate()` additively.
 
 ## ADR-AGENT-003: Local filesystem Phase 1 artifact/input storage
 
-Status: Proposed
+Status: Partially Implemented
 
 ### Context
 
@@ -106,7 +106,7 @@ Store binaries/large text on the local filesystem under
 
 ## ADR-AGENT-004: Reuse existing provider, router, and concurrency
 
-Status: Proposed
+Status: Partially Implemented
 
 ### Context
 
@@ -138,7 +138,7 @@ routes. No transport redesign.
 
 ## ADR-AGENT-005: In-process coordinator with SQLite lease recovery (Phase 1)
 
-Status: Proposed
+Status: Implemented
 
 ### Context
 
@@ -168,7 +168,7 @@ process to reclaim stale `running` jobs.
 
 ## ADR-AGENT-006: Idempotency via Idempotency-Key + request hash
 
-Status: Proposed
+Status: Implemented
 
 ### Context
 
@@ -198,7 +198,7 @@ same key+different hash → 409.
 
 ## ADR-AGENT-007: Logical agent-vs-operator route separation (Phase 1)
 
-Status: Proposed
+Status: Deferred (not implemented)
 
 ### Context
 
@@ -207,9 +207,10 @@ reach capture-management admin routes (`SECURITY_MODEL.md`).
 
 ### Decision
 
-Introduce `CHATGPT_AGENT_API_KEY` (proposed) for `/v1/agent/*`; the operator
-`CHATGPT_API_KEY` gates `/v1/chatgpt/admin/*`. Agent key cannot reach admin
-routes. Falls back to single-key compat with a startup warning.
+Future auth hardening may introduce `CHATGPT_AGENT_API_KEY` for
+`/v1/agent/*`, while the operator `CHATGPT_API_KEY` gates
+`/v1/chatgpt/admin/*`. This is not implemented today; current routes share
+the same key.
 
 ### Alternatives Considered
 
@@ -227,7 +228,7 @@ routes. Falls back to single-key compat with a startup warning.
 
 ## ADR-AGENT-008: Reuse bridge-console for the Agent Job UI
 
-Status: Proposed
+Status: Accepted (implementation pending)
 
 ### Context
 
@@ -256,7 +257,7 @@ Add the Agent Job UI as new pages in `bridge-console`. No third frontend.
 
 ## ADR-AGENT-009: UI polling first, SSE later
 
-Status: Proposed
+Status: Accepted (implementation pending)
 
 ### Context
 
@@ -281,7 +282,7 @@ terminal). SSE `/events` lands in Phase 3 with polling fallback.
 
 ## ADR-AGENT-010: Future object-storage adapter behind a Protocol
 
-Status: Proposed
+Status: Deferred
 
 ### Context
 
@@ -309,7 +310,7 @@ Define an `ArtifactStorage` Protocol (`put/get/delete/exists/metadata`);
 
 ## ADR-AGENT-011: Future queue-broker threshold
 
-Status: Proposed
+Status: Deferred
 
 ### Context
 
@@ -336,7 +337,7 @@ when multiple worker nodes are needed or sustained >~50 jobs/min.
 
 ## ADR-AGENT-012: Future multi-client security threshold
 
-Status: Proposed
+Status: Deferred
 
 ### Context
 

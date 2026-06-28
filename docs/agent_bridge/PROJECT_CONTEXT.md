@@ -1,6 +1,6 @@
 # Project Context — AI Agent → ChatGPT API Bridge
 
-> Design only. No implementation. Grounded in repository evidence on 2026-06-27.
+> Design/status context. Grounded in repository evidence on 2026-06-28.
 > When code and this document disagree, trust the code (`CLAUDE.md` §0).
 > This is **not** the official OpenAI API. Use the wording "OpenAI-shaped" /
 > "Chat Completions-style".
@@ -13,7 +13,8 @@ can submit text, multimodal, image-generation, image-edit, vision, and Deep
 Research requests; have them processed through the existing ChatGPT Web
 provider; track them durably across process/container restarts; and retrieve
 results, events, and artifacts reliably. The package also defines the
-operator UI to submit, monitor, inspect, diagnose, and manage those jobs.
+operator UI to monitor, inspect, diagnose, and manage those jobs. Submission
+UI remains deferred beyond the first read-only monitoring slice.
 
 ## 2. Problem statement
 
@@ -58,8 +59,8 @@ scheduled processes, multi-agent orchestration frameworks.
 ## 6. Target capability
 
 A durable, restart-safe, idempotent asynchronous job API **additive** to the
-existing synchronous routes, plus an operator console surface for monitoring,
-test submission, and diagnostics. See `TARGET_ARCHITECTURE.md`,
+existing synchronous routes, plus an operator console surface for monitoring
+and diagnostics. Later UI phases may add test submission. See `TARGET_ARCHITECTURE.md`,
 `API_CONTRACT.md`, `UI_WORKFLOW.md`.
 
 ## 7. Scope
@@ -67,7 +68,7 @@ test submission, and diagnostics. See `TARGET_ARCHITECTURE.md`,
 - **In scope:** durable `AgentJob` schema + state machine; job submission /
   list / status / result / cancel endpoints; local file + SQLite storage;
   in-process coordinator with restart recovery; idempotency; operator UI for
-  monitoring + test submission; reuse of existing provider/router/artifact
+  read-only monitoring first; reuse of existing provider/router/artifact
   infrastructure.
 - **Out of scope (Phase 1):** Redis, PostgreSQL, MinIO/S3, separate worker
   containers, multi-tenant RBAC, signed artifact URLs, per-client keys,

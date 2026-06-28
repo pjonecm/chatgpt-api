@@ -8,7 +8,7 @@
 
 - **Objective:** confirm a green baseline.
 - **In scope:** `python -m compileall chatgpt_api`; `python -m pytest -q`
-  (expect 371 pass + 1 Windows `0o600` platform failure — documented, not a
+  (expect 379 pass + 1 Windows `0o600` platform failure — documented, not a
   defect); `docker compose config --quiet`; frontend `bun run check`/`build`
   when bun available (NOT RUN otherwise).
 - **Out of scope:** any code change.
@@ -67,15 +67,31 @@
 - **Risks:** `openai_compat.py` blast radius — implement job layer in a new
   module `chatgpt_api/api/agent_jobs.py` wired into the handler, not inlined
   into the 5.6k-line file (clear ownership boundary, tests green —
-  `CLAUDE.md` §10 permits this). **(1A: module created; not yet wired into the handler — that is 1B.)**
+  `CLAUDE.md` §10 permits this). **(Shipped: repository, routes,
+  coordinator, text execution, and Deep Research execution are wired through
+  the facade; keep future work additive.)**
 - **Dependencies:** none new.
+
+## Phase 1C.5 — Live E2E verification
+
+- **In scope:** live end-to-end validation of shipped `chat` and
+  `deep_research` Agent Jobs against a real usable captured ChatGPT account,
+  including artifact association, cancel behavior, idempotency, and secret
+  redaction checks.
+- **Out of scope:** fabricated provider results, fixture-only success claims,
+  streaming, image, vision, multimodal, UI, and new auth.
+- **Acceptance:** a report records exact environment, commit, commands,
+  scenario outcomes, and whether real capture availability allowed the live
+  gate to pass. If no usable capture exists, mark the phase blocked and do
+  not advance to UI implementation.
 
 ## Phase 1 UI — Read-only monitoring
 
 - **In scope:** `agent-jobs` page (summary + table + filters), `job-detail`
   page (status, timeline, result, artifacts, error), controlled polling,
   `JobStatusBadge`/`JobTypeBadge`/`JobTimeline`/`ArtifactPreview`.
-- **Out of scope:** submission forms.
+- **Out of scope:** submission forms, retry controls, queue/storage summary
+  endpoints, SSE, callbacks, and any proposed endpoint not already shipped.
 - **Tests:** `bun run check` + build.
 - **Acceptance:** every Phase 1 screen maps to a shipped endpoint.
 
@@ -153,12 +169,13 @@
 11. Text execution adapter + non-streaming provider execution.
     **(Phase 1C.4 complete for `chat` + `stream=false` and `deep_research`;
     streaming execution remains deferred.)**
-12. Text-job submission UI.
-13. Image/multimodal execution.
-14. Image-related UI.
-15. Queue/storage operations UI.
-16. SSE/callback reliability.
-17. Distributed infra only when thresholds reached.
+12. Phase 1C.5 live E2E verification. **(Required gate before UI.)**
+13. Phase 1 read-only monitoring UI. **(No submission forms.)**
+14. Image/multimodal execution.
+15. Image-related UI.
+16. Queue/storage operations UI.
+17. SSE/callback reliability.
+18. Distributed infra only when thresholds reached.
 
 ## Validation commands (per phase)
 
@@ -175,8 +192,9 @@
 - `docs/OPENAI_COMPATIBILITY.md` — new `/v1/agent/*` routes.
 - `docs/ARCHITECTURE.md` — agent-job layer + `agent_jobs.py` module.
 - `docs/CLI.md` — if CLI job commands are added.
-- `docs/DOCKER.md` / `.env.example` — new env (`CHATGPT_AGENT_API_KEY`,
-  retention, limits).
+- `docs/DOCKER.md` / `.env.example` — only if implemented envs change
+  (future `CHATGPT_AGENT_API_KEY` remains deferred; do not document it as a
+  current setting).
 - `README.md` — capability snapshot + validation date when public behavior
   changes.
 - `docs/PROJECT_ANALYSIS.md` — surface ownership update.

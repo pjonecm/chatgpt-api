@@ -1,4 +1,4 @@
-"""Phase 1B additive HTTP route service for Agent Jobs.
+"""HTTP route service for durable Agent Jobs.
 
 Owns request validation, normalization, idempotency-header precedence,
 atomic request-file persistence, safe public serialization, list-filter
@@ -7,12 +7,12 @@ schema, state machine, repository internals, provider execution, account
 routing, or HTTP socket handling (those stay in ``agent_jobs.py`` /
 ``admin_store.py`` / ``openai_compat.py``).
 
-Phase 1B scope:
+Current shipped scope:
 - only ``chat`` and ``deep_research`` submissions
 - submission progresses ``accepted -> validating -> queued`` synchronously
-- queued jobs are NOT executed (Phase 1C introduces the coordinator)
+- provider execution is owned by the coordinator/facade, not this service
 - events returned as JSON only (no SSE)
-- cancellation stops at ``cancel_requested`` (never ``cancelled``)
+- cancellation persists intent; coordinator/executor resolves terminal state
 - shared Bearer key only (no agent/operator isolation)
 
 No provider, router, limiter, transport, or background thread is used.
@@ -119,10 +119,10 @@ def _validate_messages(messages: Any) -> list[dict[str, Any]]:
                 f"messages[{idx}].role must be one of {', '.join(_ALLOWED_ROLES)}", code="invalid_request_error"
             )
         content = msg.get("content")
-        # Phase 1B: string content only. Multimodal arrays are rejected.
+        # Current Agent Job API: string content only. Multimodal arrays are rejected.
         if not isinstance(content, str):
             raise ValidationError(
-                f"messages[{idx}].content must be a string in Phase 1B (multimodal input is deferred)",
+                f"messages[{idx}].content must be a string (multimodal input is deferred)",
                 code="invalid_request_error",
             )
         if role != "tool" and not content.strip():

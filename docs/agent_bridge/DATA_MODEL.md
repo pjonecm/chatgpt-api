@@ -14,9 +14,9 @@
 > cancellation finalization, atomic success-result completion, and redaction
 > below are shipped and covered by
 > `tests/test_agent_jobs.py` + `tests/test_agent_job_coordinator.py` +
-> `tests/test_agent_job_text_execution.py`.
-> Deep Research execution, streaming-delta events, and image/multimodal
-> execution remain deferred.
+> `tests/test_agent_job_text_execution.py` +
+> `tests/test_agent_job_research_execution.py`.
+> Streaming-delta events and image/multimodal execution remain deferred.
 >
 > Implemented as idempotent `CREATE TABLE IF NOT EXISTS` in
 > `BridgeAdminStore._migrate()` (`admin_store.py`) — no migration framework
@@ -197,7 +197,7 @@ stateDiagram-v2
 | `running` | coordinator claim | →streaming\|retry_wait\|succeeded\|failed\|cancel_requested | no | `started_at` | from retry_wait | →cancel_requested | "Running" | stale lease → queued/failed |
 | `streaming` | provider stream | →running\|succeeded\|cancel_requested | no | — | n/a | →cancel_requested | "Streaming" | treated as running on restart |
 | `retry_wait` | retryable error | →queued\|expired\|cancel_requested | no | — | next attempt | →cancel_requested | "Retry wait" | survives |
-| `cancel_requested` | POST /cancel | →cancelled | no | `cancel_requested_at` | n/a | idempotent | "Cancel requested" | non-running requests are finalized by the coordinator; running/streaming waits for later provider-stop integration |
+| `cancel_requested` | POST /cancel | →cancelled | no | `cancel_requested_at` | n/a | idempotent | "Cancel requested" | non-running requests are finalized by the coordinator; running Deep Research cancellation uses best-effort provider stop through the in-memory operation registry |
 | `succeeded` | result persisted | — | yes | `completed_at` | n/a | n/a | "Succeeded" | terminal |
 | `failed` | terminal error | — | yes | `completed_at` | operator retry only | n/a | "Failed" | terminal |
 | `cancelled` | stop done | — | yes | `cancelled_at` | n/a | n/a | "Cancelled" | terminal |
@@ -225,6 +225,11 @@ stateDiagram-v2
   level. The executor checks for a persisted running cancellation before
   committing success, and atomic success completion rejects stale
   `running -> succeeded` transitions when cancellation wins the race.
+- **Deep Research cancellation:** running research jobs use deterministic
+  operation IDs (`chatgptop_agent_<job_id>`) so the cancellation path can
+  best-effort stop the active in-memory provider operation. Provider stop is
+  not guaranteed and the operation registry is not durable across process
+  restart; the durable job state remains the source of truth.
 - **Durable result persistence:** successful non-streaming chat and
   Deep Research execution write
   `outputs/agent-jobs/<job_id>/results/response.json`, insert the

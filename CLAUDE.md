@@ -133,7 +133,7 @@ app directory.
 # Python (from repo root)
 python -m pip install -e '.[dev]'     # install editable + pytest
 python -m compileall chatgpt_api      # syntax/byte-compile check (no deps executed)
-python -m pytest -q                   # full Python suite (189 tests; see §17 re: Windows)
+python -m pytest -q                   # full Python suite; see §17 re: Windows platform caveat
 
 # Start the bridge API (both forms are equivalent; serve is the alias)
 python -m chatgpt_api serve --host 127.0.0.1 --port 8000
@@ -413,9 +413,9 @@ Verified constraints; do not weaken them.
 - **Platform note (Windows):** `tests/test_crypto.py::
   test_load_secrets_key_creates_owner_only_key_file` asserts Unix `0o600` file
   permissions, which NTFS does not enforce. On Windows this test fails
-  (`438 == 0o666` vs expected `384 == 0o600`); the other 188 tests pass. The
-  README "189 passed" snapshot was recorded on a Unix-like system. This is a
-  test/platform mismatch, not a code defect.
+  (`438 == 0o666` vs expected `384 == 0o600`); the rest of the suite passes.
+  This is a test/platform mismatch, not a code defect, and must not be fixed
+  by weakening the POSIX permission assertion.
 - **Captures expire** (~10 days, not guaranteed) and can be revoked by logging
   out of ChatGPT. The bridge cannot repair an expired capture locally.
 - **Hidden ChatGPT rate limits** apply beyond the local concurrency throttles;

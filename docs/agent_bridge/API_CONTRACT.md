@@ -349,7 +349,12 @@ Codes: `invalid_request_error`, `unauthorized`, `not_found`, `idempotency_confli
 - Cursor-based (`created_at` + `job_id`) — stable under concurrent inserts.
 - Filters combinable; no wildcard semantics on `client_request_id`.
 
-## 12. UI-required fields (proposed backend requirements for the console)
+## 12. UI-required fields
+
+Phase 1 read-only monitoring must use only the shipped endpoints documented
+above: list, status, events, result, artifacts, and cancel. Retry,
+queue-summary, storage-summary, and submission-oriented enhancements below
+are future requirements unless already present in those shipped responses.
 
 - Dashboard summary: counts by status, oldest queued `created_at`, avg
   recent duration (needs `started_at`/`completed_at`).
@@ -361,5 +366,5 @@ Codes: `invalid_request_error`, `unauthorized`, `not_found`, `idempotency_confli
 - Queue view: counts + coordinator state + stale-running jobs.
 - Storage view: artifact counts + missing/orphan files (reconciliation).
 
-These are **proposed API requirements** — fields not present on the existing
-endpoints must be added when the agent-job tables are implemented.
+Fields not present on the existing endpoints must be treated as unavailable
+by the UI until a backend phase explicitly ships them.

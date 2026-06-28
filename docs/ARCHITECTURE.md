@@ -172,7 +172,7 @@ ownership boundaries that matter for open-source maintenance:
   repository operations for claims, leases, attempts, results, coordinator-
   facing queue selection, non-running cancellation finalization, and atomic
   success-result completion that protects the final cancellation race.
-- `chatgpt_api/api/agent_job_routes.py`: Phase 1B additive `/v1/agent/*`
+- `chatgpt_api/api/agent_job_routes.py`: additive `/v1/agent/*`
   HTTP route service — request validation, normalization, idempotency-header
   precedence, atomic request-file persistence, safe serializers, and
   domain→HTTP mapping. The facade (`openai_compat.py`) only authorizes,

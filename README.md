@@ -609,7 +609,7 @@ required pieces are missing.
 | `GET /v1/agent/jobs/{job_id}/result` | Read the persisted final result. Queued/running jobs return `409 pending`. |
 | `GET /v1/agent/jobs/{job_id}/events` | Read JSON state-transition events. SSE is not shipped yet. |
 | `GET /v1/agent/jobs/{job_id}/artifacts` | List artifacts associated with a durable job. |
-| `POST /v1/agent/jobs/{job_id}/cancel` | Persist a cancellation request. Running cancellation is durable but does not reliably hard-stop the provider request yet. |
+| `POST /v1/agent/jobs/{job_id}/cancel` | Persist a cancellation request. Running Deep Research cancellation records durable intent and best-effort stops the in-memory provider operation when possible. |
 | `POST /v1/images/generations` | Generate one completed image and save it. |
 | `POST /v1/images/edits` | Upload source image(s), edit or composite them, and save one completed image. |
 | `POST /v1/chatgpt/vision` | OCR, describe, or custom vision prompt for up to 10 input images. |

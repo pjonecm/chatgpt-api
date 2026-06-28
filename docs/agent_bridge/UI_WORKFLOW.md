@@ -4,27 +4,34 @@
 > is **not** the security boundary — all authorization is backend-enforced.
 > Extends `apps/bridge-console` (Svelte 5, hash-routed, `apiFetch`,
   Tailwind v4, `lucide-svelte`). No third frontend.
+>
+> **Phase 1 UI scope update (2026-06-28):** the first shipped UI slice is
+> read-only monitoring only: `#agent-jobs` and `#jobs/<job_id>`, backed only
+> by currently shipped `/v1/agent/jobs*` endpoints. Submit Test, Queue,
+> Storage, Integration, retry controls, and proposed summary endpoints are
+> future concepts until their backend contracts ship.
 
 ## 1. UI purpose
 
-Let operators monitor agent-submitted jobs, manually submit test jobs,
-inspect request/result payloads, view artifacts, diagnose queue/storage,
-and help developers integrate external agents — without ever exposing
-captures, cookies, tokens, or keys.
+Let operators monitor agent-submitted jobs, inspect request/result payloads,
+view artifacts, and diagnose failures without ever exposing captures,
+cookies, tokens, or keys. Later UI phases may add submission, queue/storage
+diagnostics, and integration help.
 
 ## 2. User personas
 
 - **Operator** — monitors health, cancels stuck jobs, diagnoses failures.
-- **Integration tester** — submits test jobs before wiring a real agent.
+- **Integration tester** — uses later submission screens before wiring a real
+  agent.
 - **Agent developer** — reads the integration page for endpoints/examples.
 
 ## 3. Primary workflows
 
 1. Monitor live jobs → drill into a failing job → read redacted error →
    cancel or retry.
-2. Submit a test chat/image/vision/edit/research job → follow it to detail.
-3. Diagnose queue backlog / stale-running jobs / storage orphans.
-4. Copy integration examples (base URL, endpoints, curl, idempotency).
+2. Diagnose job status, timeline, result, artifacts, and redacted failures.
+3. Submit test jobs, queue/storage diagnostics, and integration examples are
+   future workflows.
 
 ## 4. Information architecture
 
@@ -32,13 +39,12 @@ Extend the existing `pages` constant (`App.svelte ~658-667`) with:
 
 - `overview` (existing, extend with job summary card)
 - `agent-jobs` (**new**) — dashboard + table + filters
-- `submit-test` (**new**) — test submission forms (replaces some `test-lab`
-  overlap; keep `test-lab` for synchronous testing)
+- `submit-test` (**future**) — test submission forms (not Phase 1 UI)
 - `job-detail` (**new**, hash `#jobs/<job_id>`)
-- `queue` (**new**) — execution + storage status
+- `queue` (**future**) — execution + storage status
 - `accounts` (existing, reuse)
 - `artifacts` (existing `storage`, extend with job-owned artifacts)
-- `integration` (**new**) — agent integration help (superset of `api-docs`)
+- `integration` (**future**) — agent integration help (superset of `api-docs`)
 - `settings` (existing)
 
 Navigation: top bar with the existing nav pattern; responsive collapse for
@@ -46,8 +52,9 @@ tablet. Desktop-first dense layout.
 
 ## 5. Navigation / route names
 
-Hash routes: `#agent-jobs`, `#submit-test`, `#jobs/<job_id>`, `#queue`,
-`#integration`. Existing `#accounts`, `#storage`, `#settings` unchanged.
+Phase 1 hash routes: `#agent-jobs`, `#jobs/<job_id>`. Future routes:
+`#submit-test`, `#queue`, `#integration`. Existing `#accounts`, `#storage`,
+`#settings` unchanged.
 
 ## 6. Screen definitions
 
@@ -55,9 +62,9 @@ Hash routes: `#agent-jobs`, `#submit-test`, `#jobs/<job_id>`, `#queue`,
 
 ### 6.1 Agent Jobs Dashboard
 
-- **Summary cards:** queued / running / retry-wait / succeeded / failed /
-  cancelled counts, oldest queued age, avg recent duration. (Requires the
-  proposed list endpoint + `created_at`/`started_at`/`completed_at`.)
+- **Summary cards:** derive visible counts from the shipped list response.
+  Oldest queued age and average duration may be derived client-side when the
+  necessary timestamps are present; no summary endpoint exists in Phase 1.
 - **Table:** job_id, client_request_id, type, status, model, account,
   attempt_count, created_at, started_at, duration, result_type, actions
   (view / cancel).
@@ -69,7 +76,7 @@ Hash routes: `#agent-jobs`, `#submit-test`, `#jobs/<job_id>`, `#queue`,
   `#jobs/<job_id>`; status badges; duration formatting; stale-job
   highlight; responsive table (horizontal scroll on narrow).
 
-### 6.2 Submit Test Job
+### 6.2 Submit Test Job (future, not Phase 1 UI)
 
 Forms: chat (model, system, user, prior messages, stream flag,
 client_request_id, idempotency_key, sync/async toggle), image_generation
@@ -94,7 +101,7 @@ keys, passphrases.
 Result rendering: markdown (research), plain text, JSON viewer, image
 preview + download, multiple artifacts, failed/missing-artifact state.
 
-### 6.4 Queue and Execution Status
+### 6.4 Queue and Execution Status (future, not Phase 1 UI)
 
 Counts (queued/running/retry-wait), oldest queued, coordinator state
 (in-process), active job, per-account concurrency, per-capability capacity,
@@ -102,14 +109,14 @@ jobs waiting for capacity, stale-running jobs, recent failures, last
 success, restart-recovery events. **Wording must match implementation**
 ("in-process coordinator", not "distributed cluster").
 
-### 6.5 Storage and Artifact Status
+### 6.5 Storage and Artifact Status (future, not Phase 1 UI)
 
 Artifact count, known usage, artifact types, input/result usage, expired,
 missing files, orphan files, failed cleanups, retention settings, last
 cleanup run, reconciliation status. No MinIO/S3/Redis/Postgres controls
 unless those are selected.
 
-### 6.6 Agent Integration Page
+### 6.6 Agent Integration Page (future, not Phase 1 UI)
 
 Base URL, auth header format (`Authorization: Bearer <API_KEY>` —
 placeholder, never the real key), endpoints, example payloads, curl,
@@ -130,7 +137,7 @@ check, recent failure category. No credentials.
 | `JobTypeBadge` | request type | type | — | `Badge.svelte` | 1 |
 | `JobTable` | list rows | jobs[] | list endpoint | table pattern | 1 |
 | `JobFilters` | filter bar | filters | — | `Input` | 1 |
-| `JobSummaryCards` | counts | summary | list summary | `MetricGrid.svelte` | 1 |
+| `JobSummaryCards` | counts derived from visible/listed jobs | jobs[] | list endpoint | `MetricGrid.svelte` | 1 |
 | `JobTimeline` | state transitions | events[] | events | — | 1 |
 | `JobAttemptList` | attempts | attempts[] | status | — | 1 |
 | `JobErrorPanel` | redacted error | error | — | `CaptureResult` | 1 |
@@ -139,8 +146,8 @@ check, recent failure category. No credentials.
 | `RequestPayloadViewer` | redacted JSON | request | status | `CodeBlock.svelte` | 1 |
 | `ResultViewer` | text/json/image/markdown | result | result endpoint | `CodeBlock`/`ImageResult` | 1 |
 | `AccountCapacityCard` | safe capacity | account | existing usage | — | 1 |
-| `QueueHealthPanel` | queue state | queue summary | queue endpoint | `MetricGrid` | 3 |
-| `StorageSummary` | storage state | storage summary | storage endpoint | `MetricGrid` | 3 |
+| `QueueHealthPanel` | queue state | queue summary | future queue endpoint | `MetricGrid` | 3 |
+| `StorageSummary` | storage state | storage summary | future storage endpoint | `MetricGrid` | 3 |
 | `PollingStatus` | refresh indicator | — | — | — | 1 |
 | `CopyableCodeBlock` | copy examples | code | — | `CodeBlock.svelte` | 1 |
 | `SubmitChatJobForm` | chat form | — | submit endpoint | `Input`/`Textarea` | 2 |
@@ -150,18 +157,19 @@ check, recent failure category. No credentials.
 
 ## 8. API-to-screen mapping
 
-| Screen | Element | Endpoint (proposed) | Refresh | Missing backend |
+| Screen | Element | Shipped endpoint | Refresh | Phase 1 UI |
 | --- | --- | --- | --- | --- |
-| Dashboard | summary cards | `GET /v1/agent/jobs?summary=1` (proposed) | 5s poll | summary aggregator |
-| Dashboard | table | `GET /v1/agent/jobs` | 5s poll | list endpoint |
-| Detail | status | `GET /v1/agent/jobs/{id}` | 3s poll | status endpoint |
-| Detail | timeline | `GET /v1/agent/jobs/{id}/events` | 3s poll | events endpoint |
-| Detail | result | `GET /v1/agent/jobs/{id}/result` | on terminal | result endpoint |
-| Detail | artifacts | `GET /v1/agent/jobs/{id}/artifacts` | on terminal | artifacts endpoint |
-| Submit | form | `POST /v1/agent/jobs` | one-shot | submit endpoint |
-| Queue | panel | `GET /v1/agent/jobs/queue` (proposed) | 5s poll | queue summary |
-| Storage | panel | `GET /v1/agent/jobs/storage` (proposed) | manual | storage summary |
-| Integration | examples | static | none | — |
+| Dashboard | summary cards | derived from `GET /v1/agent/jobs` | 5s poll | yes |
+| Dashboard | table | `GET /v1/agent/jobs` | 5s poll | yes |
+| Detail | status | `GET /v1/agent/jobs/{id}` | 3s poll | yes |
+| Detail | timeline | `GET /v1/agent/jobs/{id}/events` | 3s poll | yes |
+| Detail | result | `GET /v1/agent/jobs/{id}/result` | on terminal | yes |
+| Detail | artifacts | `GET /v1/agent/jobs/{id}/artifacts` | on terminal | yes |
+| Detail | cancel | `POST /v1/agent/jobs/{id}/cancel` | one-shot | yes |
+
+Future-only mappings: submission uses `POST /v1/agent/jobs`; queue/storage
+summary panels require backend endpoints that do not exist yet and must not
+be consumed by the Phase 1 UI.
 
 ## 9. Status presentation (not color-only)
 
@@ -184,7 +192,8 @@ Each badge has a label + icon + supporting text (never color alone).
 ## 10. Error / state presentation
 
 - Loading: skeleton rows.
-- Empty: "No jobs yet" + CTA to submit-test.
+- Empty: "No jobs yet" with guidance to submit through the API; no Phase 1
+  submission CTA.
 - Error: redacted message + retry button.
 - Authorization failure: "Unauthorized — check API key in Settings."
 - Server unavailable: "Bridge unreachable" + last-known data.
@@ -221,9 +230,9 @@ Each badge has a label + icon + supporting text (never color alone).
 ## 14. Phase 1 vs future UI scope
 
 - Phase 1 UI: read-only monitoring (dashboard, table, detail, timeline,
-  result, artifacts, error).
-- Phase 2 UI: submission forms + cancellation.
-- Phase 3 UI: queue/storage/integration.
+  result, artifacts, error, cancel action via shipped endpoint).
+- Phase 2 UI: submission forms.
+- Phase 3 UI: queue/storage/integration and richer operational controls.
 - Phase 4 UI: client management (only after Phase 5 backend).
 
 ## 15. Acceptance criteria

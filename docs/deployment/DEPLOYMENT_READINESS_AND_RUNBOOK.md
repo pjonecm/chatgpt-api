@@ -36,8 +36,8 @@ LAN** deployment.
 The stack builds, the Compose file validates, the API Dockerfile includes a
 healthcheck, the SQLite schema auto-migrates on first use (idempotent,
 no separate migration step required), captures are encrypted at rest, and the
-Python test suite passes (188/189; the single failure is a documented Windows
-file-permission platform mismatch, not a code defect).
+Python test suite passes except for the documented Windows
+file-permission platform mismatch, which is not a code defect.
 
 The conditions are **security and operational**, not build:
 
@@ -194,7 +194,7 @@ Non-destructive only: no `docker compose up`, no image push, no DB reset.
 | # | Command | WD | Validates | Result | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `python -m compileall chatgpt_api` | repo root | Python syntax/byte-compile | **PASS** (exit 0) | Package compiles cleanly. |
-| 2 | `python -m pytest -q` | repo root | Python unit/integration suite | **PASS w/ 1 known-platform-fail** — 188 passed, 1 failed | Failure is `test_load_secrets_key_creates_owner_only_key_file` asserting Unix `0o600`; NTFS does not enforce it (`438 == 0o666` vs `384 == 0o600`). Documented in `CLAUDE.md` §17 and `README.md` snapshot. **Not a code defect.** |
+| 2 | `python -m pytest -q` | repo root | Python unit/integration suite | **PASS w/ 1 known-platform-fail** — 379 passed, 1 failed | Failure is `test_load_secrets_key_creates_owner_only_key_file` asserting Unix `0o600`; NTFS does not enforce it (`438 == 0o666` vs `384 == 0o600`). Documented in `CLAUDE.md` §17 and `README.md` snapshot. **Not a code defect.** |
 | 3 | `docker compose -f docker-compose.yml config --quiet` | repo root | Compose syntax/resolution | **PASS** (exit 0) | Compose file valid; env interpolation resolves. |
 | 4 | `bun run --cwd apps/bridge-console check` / `build` | app dir | Console Svelte diagnostics + build | **NOT AVAILABLE** — `bun` not installed on this machine | Validated in `README.md` "Latest Validation Snapshot" dated 2026-06-26 (`0 errors, 0 warnings`, build passed). Re-run on deploy host before release. |
 | 5 | `bun run --cwd apps/character-game check` / `test` / `build` | app dir | Game Svelte diagnostics, vitest, build | **NOT AVAILABLE** — `bun` not installed | Validated in 2026-06-26 snapshot (`0 errors`, `6 tests passed`, build passed). Re-run on deploy host. |
@@ -278,7 +278,8 @@ multi-tenant hosting is **NOT READY** and is out of scope for this codebase.
 ### Verified Capabilities (reduce risk)
 
 - Compose config validates (`config --quiet` exit 0).
-- Python package compiles; 188/189 tests pass.
+- Python package compiles; on Windows, the full suite has the documented
+  Unix `0o600` permission assertion mismatch while the remaining tests pass.
 - SQLite schema is idempotent and auto-applied — no migration step to forget.
 - Captures encrypted at rest; `.gitignore`/`.dockerignore` cover all secret
   paths.
@@ -699,7 +700,7 @@ the deploy host matters):
 
 ```sh
 python3 -m compileall chatgpt_api tests
-python3 -m pytest -q                       # expect 188 pass + 1 known Windows perm fail
+python3 -m pytest -q                       # expect all tests except the known Windows perm fail
 bun run --cwd apps/bridge-console check && bun run --cwd apps/bridge-console build
 bun run --cwd apps/character-game check && bun run --cwd apps/character-game test && bun run --cwd apps/character-game build
 docker compose config --quiet

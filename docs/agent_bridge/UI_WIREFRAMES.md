@@ -3,14 +3,19 @@
 > Low-fidelity text/Mermaid wireframes to lock workflow, information
 > hierarchy, API requirements, states, actions, navigation. Not polished
 > assets. Extends `apps/bridge-console`.
+>
+> **Phase 1 UI scope update (2026-06-28):** implement only read-only
+> monitoring with shipped endpoints (`#agent-jobs`, `#jobs/<job_id>`).
+> Submit Test, Queue, Storage, and Integration wireframes are future/reference
+> sketches and must not be treated as Phase 1 implementation targets.
 
 ## Navigation shell
 
 ```text
 ┌──────────────────────────────────────────────────────────────┐
 │ [logo] Bridge Console        [base url▾] [key•]   [refresh]   │
-│ Overview | Agent Jobs | Submit Test | Queue | Accounts |      │
-│ Artifacts | Integration | Settings                            │
+│ Overview | Agent Jobs | Accounts | Artifacts | Settings       │
+│ Future: Submit Test | Queue | Integration                     │
 ├──────────────────────────────────────────────────────────────┤
 │                                                                │
 │                    < page content >                            │
@@ -39,10 +44,10 @@ Hash-routed; nav collapses to a menu on tablet.
 └────────────────────────────────────────────────────────────────┘
 ```
 
-States: loading skeleton; empty "No jobs yet → Submit Test"; error banner;
+States: loading skeleton; empty "No jobs yet"; error banner;
 no-results "No jobs match filters"; API-unavailable "Bridge unreachable".
 
-## 2. Submit Text Job
+## 2. Submit Text Job (future, not Phase 1 UI)
 
 ```text
 ┌─ Submit Test · Chat ───────────────────────────────────────────┐
@@ -60,7 +65,7 @@ no-results "No jobs match filters"; API-unavailable "Bridge unreachable".
 └────────────────────────────────────────────────────────────────┘
 ```
 
-## 3. Submit Image Job
+## 3. Submit Image Job (future, not Phase 1 UI)
 
 ```text
 ┌─ Submit Test · Image Generation ───────────────────────────────┐
@@ -102,7 +107,7 @@ flowchart LR
     H[cancel requested]-->I[cancelled]
 ```
 
-## 5. Queue and Execution Status
+## 5. Queue and Execution Status (future, not Phase 1 UI)
 
 ```text
 ┌─ Queue & Execution ────────────────────────────────────────────┐
@@ -118,7 +123,7 @@ flowchart LR
 └────────────────────────────────────────────────────────────────┘
 ```
 
-## 6. Storage and Artifact Status
+## 6. Storage and Artifact Status (future, not Phase 1 UI)
 
 ```text
 ┌─ Storage & Artifacts ──────────────────────────────────────────┐
@@ -147,8 +152,8 @@ flowchart LR
 │                                                                │
 │ [curl example ▾]  [python client ▾]  [idempotency ▾]           │
 │ Limits: 25 MiB request · 20 MiB/image · 10 images              │
-│ Supported: chat, image_generation, image_edit, vision,         │
-│           deep_research                                        │
+│ Current Agent Jobs: chat, deep_research                        │
+│ Deferred: image_generation, image_edit, vision, multimodal     │
 │ Unsupported: masks, n>1, native tool-call API, token usage     │
 └────────────────────────────────────────────────────────────────┘
 ```
@@ -174,7 +179,7 @@ graph TD
 | State | Trigger | Render |
 | --- | --- | --- |
 | loading | first fetch | skeleton rows |
-| empty | 0 jobs total | "No jobs yet → Submit Test" |
+| empty | 0 jobs total | "No jobs yet" |
 | no-results | filters match 0 | "No jobs match filters" + Clear |
 | error | fetch non-2xx | redacted banner + retry |
 | auth | 401 | "Unauthorized — check key in Settings" |

@@ -1,4 +1,4 @@
-"""Phase 1C.3 in-process Agent Job coordinator lifecycle.
+"""Phase 1C in-process Agent Job coordinator lifecycle.
 
 Owns startup recovery, bounded polling, durable retry promotion, non-running
 cancellation finalization, and the single-active-job execution boundary.

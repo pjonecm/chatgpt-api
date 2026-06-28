@@ -202,6 +202,11 @@ chatgpt_api/api/http_utils.py
 chatgpt_api/api/prompts.py
 chatgpt_api/api/image_inputs.py
 chatgpt_api/api/admin_store.py
+chatgpt_api/api/agent_jobs.py
+chatgpt_api/api/agent_job_routes.py
+chatgpt_api/api/agent_job_coordinator.py
+chatgpt_api/api/text_execution.py
+chatgpt_api/api/research_execution.py
 chatgpt_api/api/openai_compat.py
 ```
 
@@ -278,6 +283,21 @@ ratio, ChatGPT can change canvas dimensions or move objects.
 Owns SQLite metadata for generated files and persisted operator settings. This
 is intentionally lightweight so the bridge can be shipped without a full
 database dependency.
+
+### Agent Job modules
+
+`agent_jobs.py` owns durable Agent Job state, idempotency, leases, attempts,
+events, result rows, and artifact association queries. `agent_job_routes.py`
+owns the additive `/v1/agent/*` HTTP surface and intentionally does not call
+providers directly. `agent_job_coordinator.py` owns startup recovery, bounded
+polling, retry promotion, non-running cancellation finalization, and the
+single-active-job execution boundary. `text_execution.py` and
+`research_execution.py` provide the shared non-streaming chat and Deep
+Research execution adapters used by the facade/coordinator path.
+
+Current Agent Job execution scope is `chat` with `stream=false` and
+`deep_research`. Streaming, image, edit, vision, multimodal, callbacks, SSE,
+and per-client auth remain deferred.
 
 ### `openai_compat.py`
 

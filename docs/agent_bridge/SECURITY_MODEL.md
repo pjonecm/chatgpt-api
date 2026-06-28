@@ -24,10 +24,10 @@
 - **Local-first deployment assumption** — `127.0.0.1` bind by default;
   `0.0.0.0` only for Docker/LAN.
 
-## 2. Phase 1 — private LAN / internal use
+## 2. Current Phase 1 — private LAN / internal use
 
-Required design considerations (enforced by the agent-job layer, not just
-documented):
+Required hardening considerations. Items marked proposed are not implemented
+and must not be described as current controls:
 
 - **Require a non-default API key** in production mode; refuse to start with
   `local-dev-key` when a `PRODUCTION=1`-style flag is set (proposed).
@@ -36,9 +36,8 @@ documented):
 - **Restrict CORS** — proposed `CHATGPT_ALLOWED_ORIGINS` env (currently
   hardcoded `*`); Phase 1 may keep `*` only for true loopback.
 - **Logically separate agent routes** (`/v1/agent/*`) from operator routes
-  (`/v1/chatgpt/admin/*`) — a separate `CHATGPT_AGENT_API_KEY` is proposed
-  so an agent key cannot reach admin/capture endpoints. (Backend-enforced;
-  UI is not the boundary.)
+  (`/v1/chatgpt/admin/*`) — a separate `CHATGPT_AGENT_API_KEY` is a future
+  proposal, not implemented. Today both surfaces use `CHATGPT_API_KEY`.
 - **Request-size limits** (25 MiB) + **MIME validation** + **filename
   sanitization** at the agent endpoint.
 - **Redacted logs** — reuse `redacted_headers()`, `to_redacted_dict()`,
@@ -79,9 +78,9 @@ flowchart LR
     CD --> CAP
 ```
 
-**Key risk (Phase 1):** the shared key gives any agent full operator access.
-Mitigation: separate agent key (proposed) + keep the bridge off the public
-internet.
+**Key risk (current Phase 1):** the shared key gives any agent full operator
+access. Current mitigation is deployment isolation: keep the bridge private
+and off the public internet. A separate agent key remains a future proposal.
 
 ## 4. Trust boundaries
 
@@ -93,14 +92,14 @@ internet.
 
 ## 5. Agent vs operator access
 
-- **Phase 1B (shipped, 2026-06-27):** the new `/v1/agent/*` routes use the
+- **Current through Phase 1C.4 (shipped, 2026-06-28):** the `/v1/agent/*` routes use the
   **same shared `CHATGPT_API_KEY`** as every other protected route via the
   existing `authorize()` gate. There is **no agent/operator isolation** — an
   agent holding the shared key can still reach `/v1/chatgpt/admin/*`
   including account-capture management. A separate `CHATGPT_AGENT_API_KEY`
-  is **not implemented** (deferred). Phase 1B deployments must remain
+  is **not implemented** (deferred). Phase 1 deployments must remain
   private/trusted.
-- **Phase 1 (proposed, not implemented):** two env vars —
+- **Future auth hardening (proposed, not implemented):** two env vars —
   `CHATGPT_API_KEY` (operator/admin) and `CHATGPT_AGENT_API_KEY` (agent
   routes only). Agent key cannot reach `/v1/chatgpt/admin/*`. If
   `CHATGPT_AGENT_API_KEY` is unset, agent routes fall back to
@@ -150,5 +149,5 @@ internet.
 | Phase | Auth | Tenancy | CORS | TLS | Callbacks |
 | --- | --- | --- | --- | --- | --- |
 | Current | 1 shared key | none | `*` | none | none |
-| Phase 1 | shared + proposed agent key | none | restricted (proposed) | behind proxy | disabled/allowlist |
+| Future hardening | shared + proposed agent key | none | restricted (proposed) | behind proxy | disabled/allowlist |
 | Phase 5 | per-client keys + scopes | tenant-aware | restricted | proxy | per-client policy |

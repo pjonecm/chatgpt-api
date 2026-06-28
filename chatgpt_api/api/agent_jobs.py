@@ -1,11 +1,11 @@
-"""Phase 1A durable AgentJob persistence and domain logic.
+"""Durable AgentJob persistence and domain logic.
 
 Ownership boundary for asynchronous agent jobs. This module contains the
 state machine, idempotency, canonical request hashing, server-generated IDs,
 redaction, and the repository operations that persist jobs, results, events,
 and attempts to the SQLite admin database.
 
-Scope (Phase 1A only):
+Scope:
 
 - additive SQLite schema (in ``BridgeAdminStore._migrate``)
 - durable job/result/event/attempt records
@@ -16,13 +16,13 @@ Scope (Phase 1A only):
 - durable cancellation-request state
 - repository queries for status/events/attempts/results/artifacts
 
-Explicitly NOT in this module (later phases):
+Explicitly NOT in this module (owned elsewhere or deferred):
 
-- ``/v1/agent/*`` HTTP routes
-- an execution coordinator thread / worker process
+- ``/v1/agent/*`` HTTP routes (``agent_job_routes.py``)
+- the execution coordinator thread (``agent_job_coordinator.py``)
 - provider calls (``ChatGPTProvider``, ``AccountRouter``, limiters)
-- file upload parsing, image/multimodal inputs
-- callbacks/webhooks, SSE streaming-delta persistence
+- file upload parsing, image/multimodal inputs (deferred)
+- callbacks/webhooks and SSE streaming-delta persistence (deferred)
 
 Standard library only. One SQLite connection per operation. Parameterized
 SQL exclusively. No ORM, no migration framework.
@@ -1441,7 +1441,7 @@ class AgentJobRepository:
         Recovery transitions use compare-and-swap on the current status, so
         running the sweep twice is idempotent: the second pass finds the jobs
         no longer in ``running``/``streaming``. No provider stop is invoked.
-        Invoked only by tests in this phase; not wired to startup.
+        Called by AgentJobCoordinator startup recovery and by tests.
         """
 
         now = now or utc_now()
