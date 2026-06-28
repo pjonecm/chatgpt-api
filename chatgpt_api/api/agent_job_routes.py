@@ -297,7 +297,11 @@ def serialize_status(job, *, artifact_count: int = 0) -> dict[str, Any]:
     }
 
 
-def serialize_result(result, response: dict[str, Any] | None = None) -> dict[str, Any]:
+def serialize_result(
+    result,
+    response: dict[str, Any] | None = None,
+    artifacts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     # Never expose response_storage_key (filesystem path).
     payload: dict[str, Any] = {
         "job_id": result.job_id,
@@ -314,6 +318,8 @@ def serialize_result(result, response: dict[str, Any] | None = None) -> dict[str
         payload["finish_reason"] = result.finish_reason
     if response is not None:
         payload["response"] = response
+    if artifacts is not None:
+        payload["artifacts"] = [serialize_artifact(artifact) for artifact in artifacts]
     return payload
 
 
@@ -358,10 +364,12 @@ class AgentJobRouteService:
         repo: AgentJobRepository,
         output_root: Path,
         wake_callback: Callable[[], None] | None = None,
+        cancel_callback: Callable[[Any], None] | None = None,
     ) -> None:
         self._repo = repo
         self._output_root = output_root
         self._wake_callback = wake_callback
+        self._cancel_callback = cancel_callback
 
     # -- submission ---------------------------------------------------------- #
 
@@ -487,7 +495,16 @@ class AgentJobRouteService:
                     "job result payload is missing or invalid",
                     type_="internal_error",
                 )
-        return 200, serialize_result(result, response)
+        artifacts = None
+        if result.result_type == "research":
+            artifacts = self._repo.list_artifacts(job_id)
+            if not artifacts:
+                return 500, build_error(
+                    "storage_failure",
+                    "job research artifact is missing or invalid",
+                    type_="internal_error",
+                )
+        return 200, serialize_result(result, response, artifacts)
 
     # -- events -------------------------------------------------------------- #
 
@@ -529,6 +546,11 @@ class AgentJobRouteService:
                 "cancel_conflict",
                 "job is not in a cancellable state",
             )
+        if self._cancel_callback is not None:
+            try:
+                self._cancel_callback(job)
+            except Exception:
+                pass
         self._wake_coordinator()
         return 200, {
             "job_id": job.job_id,

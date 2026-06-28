@@ -3,12 +3,12 @@
 > **Status: Phase 1A persistence + Phase 1B HTTP routes implemented,
 > Phase 1C.1 retry persistence primitives implemented, and Phase 1C.2
 > coordinator lifecycle/recovery polling shipped, plus Phase 1C.3
-> non-streaming chat execution** in
+> non-streaming chat execution and Phase 1C.4 Deep Research execution** in
 > `chatgpt_api/api/agent_jobs.py`,
 > `chatgpt_api/api/agent_job_routes.py`,
 > `chatgpt_api/api/agent_job_coordinator.py`, and
-> `chatgpt_api/api/text_execution.py`, `chatgpt_api/api/openai_compat.py`,
-> and `BridgeAdminStore._migrate()` (2026-06-27). The tables, indexes, state
+> `chatgpt_api/api/text_execution.py`, `chatgpt_api/api/research_execution.py`,
+> `chatgpt_api/api/openai_compat.py`, and `BridgeAdminStore._migrate()` (2026-06-28). The tables, indexes, state
 > machine, idempotency, claim/lease, recovery sweep, durable `retry_wait`
 > scheduling, due-retry promotion primitives, queued/non-running
 > cancellation finalization, atomic success-result completion, and redaction
@@ -77,8 +77,8 @@
 - **Write ownership:** job service + coordinator.
 - **Read patterns:** by `job_id`; list by status/type/date cursor.
 - **Phase 1:** yes (minus `priority` enforcement, `callback_*`; `chat`
-  execution is shipped for `stream=false`, while `deep_research` and
-  streaming execution remain later).
+  execution is shipped for `stream=false`, `deep_research` execution saves
+  markdown artifacts, and streaming execution remains later).
 
 ## 2. `job_inputs` (Phase 2 — image/multimodal)
 
@@ -212,11 +212,11 @@ stateDiagram-v2
 - **Crash recovery:** on startup, `running`/`streaming` jobs with stale
   `lease_expires_at` are moved to `queued` (re-queue) if attempts remain,
   else `failed` with `error_code=worker_crash`.
-- **Coordinator polling/execution (Phase 1C.3):** one in-process coordinator
+- **Coordinator polling/execution (Phase 1C):** one in-process coordinator
   runs startup recovery once, promotes due `retry_wait` jobs via the durable
   repository primitive, finalizes persisted non-running
-  `cancel_requested -> cancelled` jobs, selects eligible queued `chat` jobs,
-  claims them, and invokes the installed executor.
+  `cancel_requested -> cancelled` jobs, selects eligible queued `chat` or
+  `deep_research` jobs, claims them, and invokes the installed executor.
 - **Lease settings:** claim duration is 60 seconds and the active executor
   renews the lease every 15 seconds while provider work is still in flight.
 - **Stale detection:** a background sweep marks `running` jobs whose
@@ -225,9 +225,11 @@ stateDiagram-v2
   level. The executor checks for a persisted running cancellation before
   committing success, and atomic success completion rejects stale
   `running -> succeeded` transitions when cancellation wins the race.
-- **Durable result persistence:** successful non-streaming chat execution
-  writes `outputs/agent-jobs/<job_id>/results/response.json`, inserts the
-  corresponding `job_results` row, and only then exposes the result route.
+- **Durable result persistence:** successful non-streaming chat and
+  Deep Research execution write
+  `outputs/agent-jobs/<job_id>/results/response.json`, insert the
+  corresponding `job_results` row, and only then expose the result route.
+  Research results also require a job-associated markdown artifact row.
 
 ## Transaction requirements
 

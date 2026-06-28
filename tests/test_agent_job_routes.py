@@ -336,6 +336,65 @@ def test_safe_result_serializer_excludes_storage_paths(tmp_path):
     assert "response" not in serialized
 
 
+def test_research_result_serializer_includes_artifacts_without_inline_markdown(tmp_path):
+    svc, repo, output_root = _svc(tmp_path)
+    _, p = svc.submit(_research_body(), None)
+    repo.claim_job(p["job_id"], lease_owner="w1", lease_expires_at="2099-01-01T00:00:00Z")
+    response_key = write_response_json(
+        output_root,
+        p["job_id"],
+        {"id": "chatcmpl_research", "choices": [{"message": {"content": "saved to artifact"}}]},
+    )
+    art_file = tmp_path / "report.md"
+    art_file.write_text("# Report", encoding="utf-8")
+    repo.record_artifact(
+        p["job_id"],
+        asset={
+            "id": "file_research",
+            "filename": "report.md",
+            "path": str(art_file),
+            "download_url": "/v1/chatgpt/files/file_research/report.md",
+            "content_type": "text/markdown; charset=utf-8",
+            "bytes": 8,
+        },
+        kind="research",
+    )
+    repo.complete_job_with_result(
+        p["job_id"],
+        result_type="research",
+        response_storage_key=response_key,
+        model="chatgpt-deep-research",
+        account_alias="acct",
+        finish_reason="stop",
+    )
+
+    status, payload = svc.get_result(p["job_id"])
+
+    assert status == 200
+    assert payload["result_type"] == "research"
+    assert "text" not in payload
+    assert payload["artifacts"][0]["file_id"] == "file_research"
+    assert payload["artifacts"][0]["content_type"].startswith("text/markdown")
+
+
+def test_research_result_returns_storage_failure_when_artifact_missing(tmp_path):
+    svc, repo, output_root = _svc(tmp_path)
+    _, p = svc.submit(_research_body(), None)
+    repo.claim_job(p["job_id"], lease_owner="w1", lease_expires_at="2099-01-01T00:00:00Z")
+    response_key = write_response_json(output_root, p["job_id"], {"id": "chatcmpl_research"})
+    repo.complete_job_with_result(
+        p["job_id"],
+        result_type="research",
+        response_storage_key=response_key,
+        model="chatgpt-deep-research",
+    )
+
+    status, payload = svc.get_result(p["job_id"])
+
+    assert status == 500
+    assert payload["error"]["code"] == "storage_failure"
+
+
 def test_safe_event_serializer_parses_json(tmp_path):
     svc, repo, _ = _svc(tmp_path)
     s, p = svc.submit(_chat_body(), None)
@@ -645,6 +704,21 @@ def test_cancel_endpoint_returns_cancel_requested(http_server):
     status, payload, _ = _http(http_server, "POST", f"/v1/agent/jobs/{p['job_id']}/cancel")
     assert status == 200
     assert payload["status"] == "cancel_requested"
+
+
+def test_cancel_invokes_best_effort_callback(tmp_path):
+    store = BridgeAdminStore(tmp_path / "admin.sqlite")
+    repo = AgentJobRepository(store)
+    output_root = tmp_path / "agent-jobs"
+    stopped: list[str] = []
+    svc = AgentJobRouteService(repo, output_root, cancel_callback=lambda job: stopped.append(job.job_id))
+    _, p = svc.submit(_research_body(), None)
+
+    status, payload = svc.cancel(p["job_id"])
+
+    assert status == 200
+    assert payload["status"] == STATUS_CANCEL_REQUESTED
+    assert stopped == [p["job_id"]]
 
 
 def test_terminal_cancel_returns_409(tmp_path):

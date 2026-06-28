@@ -1,16 +1,17 @@
 # API Contract — AI Agent → ChatGPT API Bridge
 
-> **Status (2026-06-27): Phase 1C.3 non-streaming chat execution shipped** in
+> **Status (2026-06-28): Phase 1C.4 chat and Deep Research execution shipped** in
 > `chatgpt_api/api/agent_job_routes.py`, dispatched from `openai_compat.py`.
 > The routes below (`POST /v1/agent/jobs`, list, status, result, events,
 > artifacts, cancel) are implemented for `chat` and `deep_research` only.
 > Non-streaming `chat` jobs now execute through the same shared internal
 > text-execution adapter used by synchronous `POST /v1/chat/completions`.
-> Successful chat jobs persist both a durable `job_results` row and
-> `outputs/agent-jobs/<job_id>/results/response.json`. `deep_research`
-> submissions remain accepted but queued for a later phase, events remain
-> JSON-only (no SSE), and running cancellation is still best-effort at the
-> durable job-state level rather than a reliable provider hard-stop.
+> `deep_research` jobs now execute through the existing synchronous Deep
+> Research provider path without HTTP loopback and save markdown artifacts
+> associated with the job. Successful jobs persist both a durable
+> `job_results` row and `outputs/agent-jobs/<job_id>/results/response.json`.
+> Events remain JSON-only (no SSE), and running Deep Research cancellation is
+> best-effort via the existing in-memory ChatGPT operation stop path.
 > Not the official OpenAI API — "OpenAI-shaped".
 
 ## Routes
@@ -67,10 +68,10 @@ in Phase 1; agent/operator separation is logical only — see
 
 - `messages`: OpenAI-shaped; in the current shipped route service they are
   validated as string content only.
-- `stream=false`: eligible for Phase 1C.3 coordinator execution.
+- `stream=false`: eligible for Phase 1C coordinator execution.
 - `stream=true`: accepted at submission time but **not supported by the
   current executor**; the job does not stream and will not produce a
-  successful streaming result in Phase 1C.3.
+  successful streaming result in Phase 1C.4.
 
 ### 1.2 Image-generation job
 
@@ -147,6 +148,8 @@ Deferred to Phase 2. Not accepted by the current shipped route service.
 
 - Long-running (up to `CHATGPT_WEB_TIMEOUT=5400`s). UI must warn.
 - Normal (non-temporary) chat mode enforced (existing).
+- Successful jobs return artifact metadata from `/result` and `/artifacts`;
+  the markdown report body is not inlined in the result response.
 
 ## 2. Job acceptance response (201)
 
@@ -241,11 +244,30 @@ Future shape once vision job execution ships.
 
 ### Research result
 
-Future shape once Deep Research Agent Job execution ships.
-
 ```json
-{"job_id": "...", "result_type": "research", "artifacts": [{"file_id": "file_...", "filename": "llm-agi.md", "download_url": "...", "content_type": "text/markdown"}]}
+{
+  "job_id": "...",
+  "result_type": "research",
+  "model": "chatgpt-deep-research",
+  "account_alias": "main-pro",
+  "finish_reason": "stop",
+  "response": {"object": "chat.completion", "choices": [{"message": {"role": "assistant", "content": "Done. Deep Research report saved..."}}]},
+  "artifacts": [
+    {
+      "file_id": "file_...",
+      "filename": "llm-agi.md",
+      "download_url": "/v1/chatgpt/files/file_.../llm-agi.md",
+      "content_type": "text/markdown; charset=utf-8",
+      "bytes": 12345
+    }
+  ]
+}
 ```
+
+- The markdown report is downloaded through the artifact URL; it is not
+  returned inline by `GET /v1/agent/jobs/{job_id}/result`.
+- If the persisted research artifact row or file is missing, the result route
+  fails closed with `500 storage_failure`.
 
 ### Error result
 
@@ -262,10 +284,12 @@ Illustrative terminal error shape.
   (`accepted`, `validating`, `queued`, `retry_wait`), the in-process
   coordinator finalizes `cancel_requested → cancelled` without contacting the
   provider.
-- Running cancellation is currently best-effort at the durable job-state
-  level. The cancellation request is persisted, and a cancellation that wins
-  the final state transition prevents success result persistence. The
-  underlying provider request is not yet reliably interrupted in flight.
+- Running `deep_research` cancellation persists the durable cancel request and
+  best-effort calls the existing ChatGPT operation stop path using
+  `chatgptop_agent_<job_id>`. If the Deep Research widget identifiers are not
+  available yet, the in-memory operation remains marked `cancel_requested` and
+  retries the stop when the identifiers arrive. In-memory operations do not
+  survive process restart.
 - 409 if already terminal (except `cancelled` → 200).
 - Returns the updated status.
 

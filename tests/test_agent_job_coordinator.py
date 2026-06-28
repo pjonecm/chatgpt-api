@@ -23,6 +23,7 @@ from chatgpt_api.api.agent_jobs import (
     STATUS_VALIDATING,
 )
 from chatgpt_api.api.openai_compat import OpenAICompatConfig
+from chatgpt_api.api.research_execution import ResearchExecutionResult
 from chatgpt_api.api.text_execution import TextExecutionResult
 
 T0 = "2026-01-01T00:00:00Z"
@@ -51,6 +52,23 @@ def _queued_job(repo: AgentJobRepository, *, now: str = T0, message: str = "hi",
         model="auto",
         request=_make_chat_request(message),
         max_attempts=max_attempts,
+        now=now,
+    ).job.job_id
+    repo.transition(job_id, target=STATUS_VALIDATING, expected=STATUS_ACCEPTED, now=now)
+    repo.transition(job_id, target=STATUS_QUEUED, expected=STATUS_VALIDATING, now=now)
+    return job_id
+
+
+def _queued_research_job(repo: AgentJobRepository, *, now: str = T0, message: str = "research") -> str:
+    job_id = repo.create_job(
+        request_type="deep_research",
+        model="chatgpt-deep-research",
+        request={
+            "type": "deep_research",
+            "model": "chatgpt-deep-research",
+            "messages": [{"role": "user", "content": message}],
+        },
+        max_attempts=3,
         now=now,
     ).job.job_id
     repo.transition(job_id, target=STATUS_VALIDATING, expected=STATUS_ACCEPTED, now=now)
@@ -323,6 +341,22 @@ def test_coordinator_without_executor_does_not_claim_jobs(tmp_path):
     assert job.attempt_count == 0
 
 
+def test_run_once_selects_deep_research_jobs_for_executor(tmp_path):
+    repo = _repo(tmp_path)
+    job_id = _queued_research_job(repo)
+    started: list[str] = []
+
+    def execute(job):
+        started.append(job.job_id)
+
+    coordinator = AgentJobCoordinator(repo, now_fn=lambda: T3, executor=execute)
+    result = coordinator.run_once()
+
+    assert result.selected_job_id == job_id
+    assert result.executor_invoked is True
+    assert started == [job_id]
+
+
 def test_create_server_installs_real_chat_executor_for_agent_jobs(tmp_path, monkeypatch):
     cfg = OpenAICompatConfig(account="test", api_key="test-key", admin_db_path=tmp_path / "admin.sqlite")
     server = compat.create_server(cfg)
@@ -376,6 +410,70 @@ def test_create_server_installs_real_chat_executor_for_agent_jobs(tmp_path, monk
         result = repo.get_result(job_id)
         assert result is not None
         assert result.text_content == "done"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+
+def test_create_server_executes_deep_research_agent_jobs(tmp_path, monkeypatch):
+    cfg = OpenAICompatConfig(account="test", api_key="test-key", admin_db_path=tmp_path / "admin.sqlite")
+    server = compat.create_server(cfg)
+    executed = threading.Event()
+
+    async def fake_execute(config, body, router, runtime, *, operation_id=None):
+        executed.set()
+        report_path = tmp_path / "report.md"
+        report_path.write_text("# Research\n\nDone.", encoding="utf-8")
+        return ResearchExecutionResult(
+            requested_model=body["model"],
+            model_slug="gpt-5-thinking",
+            account="test",
+            prompt=body["messages"][0]["content"],
+            markdown="# Research\n\nDone.",
+            report_path=report_path,
+            metadata={"status": "complete"},
+        )
+
+    monkeypatch.setattr(compat, "execute_deep_research", fake_execute)
+
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        repo = AgentJobRepository(BridgeAdminStore(tmp_path / "admin.sqlite"))
+        job_id = repo.create_job(
+            request_type="deep_research",
+            model="chatgpt-deep-research",
+            request={
+                "type": "deep_research",
+                "model": "chatgpt-deep-research",
+                "messages": [{"role": "user", "content": "research"}],
+            },
+            max_attempts=3,
+            now=T0,
+        ).job.job_id
+        repo.transition(job_id, target=STATUS_VALIDATING, expected=STATUS_ACCEPTED, now=T0)
+        request_dir = tmp_path / "agent-jobs" / job_id
+        request_dir.mkdir(parents=True, exist_ok=True)
+        (request_dir / "request.json").write_text(
+            '{"type":"deep_research","model":"chatgpt-deep-research","messages":[{"role":"user","content":"research"}]}',
+            encoding="utf-8",
+        )
+        repo.transition(job_id, target=STATUS_QUEUED, expected=STATUS_VALIDATING, now=T1)
+        server.agent_job_coordinator.wake()
+        assert executed.wait(timeout=3)
+        for _ in range(100):
+            if repo.get_job(job_id).status == "succeeded":
+                break
+            threading.Event().wait(0.02)
+        job = repo.get_job(job_id)
+        assert job.status == "succeeded"
+        result = repo.get_result(job_id)
+        assert result is not None
+        assert result.result_type == "research"
+        artifacts = repo.list_artifacts(job_id)
+        assert artifacts[0]["content_type"].startswith("text/markdown")
+        assert artifacts[0]["filename"] == "report.md"
     finally:
         server.shutdown()
         server.server_close()

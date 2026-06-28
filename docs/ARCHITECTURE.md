@@ -178,11 +178,11 @@ ownership boundaries that matter for open-source maintenance:
   domain→HTTP mapping. The facade (`openai_compat.py`) only authorizes,
   parses, dispatches, wakes the coordinator after durable queue/cancel
   writes, and serves persisted results. No direct provider calls.
-- `chatgpt_api/api/agent_job_coordinator.py`: Phase 1C.3 in-process
+- `chatgpt_api/api/agent_job_coordinator.py`: Phase 1C in-process
   coordinator lifecycle — startup recovery, durable retry promotion polling,
   non-running cancellation finalization, wake/stop signaling, the
   single-active-job execution boundary, and invocation of the installed
-  eligible-job executor.
+  eligible-job executor for queued `chat` and `deep_research` jobs.
 - `chatgpt_api/api/openai_compat.py`: route orchestrator, account routing,
   operation cancellation, streaming, admin endpoints, synchronous
   non-streaming chat integration through the shared adapter, response
@@ -192,6 +192,11 @@ ownership boundaries that matter for open-source maintenance:
   Job coordinator. It reuses the existing provider routing and limiter path
   via injected runtime callables and also owns safe request/response JSON
   persistence helpers plus small retry/backoff utilities.
+- `chatgpt_api/api/research_execution.py`: shared Deep Research execution
+  adapter used by synchronous `POST /v1/chat/completions` and durable
+  `deep_research` Agent Jobs. It reuses the existing provider/account
+  routing, usage preflight, research limiter, normal-chat behavior, operation
+  tracking hooks, and final markdown report extraction without HTTP loopback.
 
 `openai_compat.py` is still intentionally the main facade while routes are
 stabilizing. Future splits should move one domain at a time:

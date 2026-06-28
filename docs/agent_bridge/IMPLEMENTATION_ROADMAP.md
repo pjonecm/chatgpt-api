@@ -22,8 +22,10 @@
 > retry promotion polling, and non-provider cancellation finalization)
 > implemented.**
 > **Phase 1C.3 (shared text execution adapter + non-streaming chat execution)
-> implemented.** Streaming chat, deep research execution, image jobs, and
-> multimodal execution remain deferred.
+> implemented.**
+> **Phase 1C.4 (Deep Research execution + markdown artifact association)
+> implemented.** Streaming chat, image jobs, and multimodal execution remain
+> deferred.
 
 - **Objective:** restart-safe async jobs for text/chat + research.
 - **In scope:**
@@ -38,13 +40,13 @@
   - Endpoints: `POST /v1/agent/jobs`, `GET /v1/agent/jobs`, `GET …/{id}`,
     `GET …/{id}/result`, `POST …/{id}/cancel`, `GET …/{id}/events` (JSON,
     not SSE), `GET …/{id}/artifacts`. **(1B done — chat + deep_research only;
-    non-streaming chat jobs now execute, deep_research still queues only)**
+    non-streaming chat jobs and Deep Research markdown artifact jobs now execute)**
   - In-process coordinator (single process; SQLite poller + wake signal).
     **(1C.2 done for lifecycle/polling/recovery/cancellation; production
-    default now claims eligible queued chat jobs through the real executor)**
+    default now claims eligible queued chat and deep_research jobs through the real executor)**
   - Reuse `AccountRouter` + `BoundedSemaphore` + `ChatGPTProvider`.
-    **(1C.3 done for non-streaming chat jobs; other job types deferred)**
-  - Local storage `outputs/agent-jobs/<job_id>/` (request.json, response.json). **(1C.3 done for request persistence + successful chat response persistence)**
+    **(1C.4 done for non-streaming chat and Deep Research jobs; image/vision job types deferred)**
+  - Local storage `outputs/agent-jobs/<job_id>/` (request.json, response.json). **(1C.4 done for request persistence + successful chat/research response persistence)**
 - **Out of scope:** image/multimodal inputs (Phase 2), SSE streaming,
   callbacks, per-client auth.
 - **Schema changes:** additive tables only (idempotent). **(1A + 1C.1 done)**
@@ -52,15 +54,16 @@
 - **Tests:** `tests/test_agent_jobs.py` (state machine, idempotency,
   retry scheduling/promotion, restart recovery, redaction),
   `tests/test_agent_job_routes.py`, `tests/test_agent_job_coordinator.py`,
-  `tests/test_agent_job_text_execution.py`, and the relevant
+  `tests/test_agent_job_text_execution.py`, `tests/test_agent_job_research_execution.py`, and the relevant
   `tests/test_openai_compat.py` adapter coverage. Current validated counts:
-  `96`, `58`, `22`, `6`, and `88` passed respectively.
+  `96`, `61`, `24`, `6`, `3`, and `88` passed respectively.
 - **Docs:** `docs/OPENAI_COMPATIBILITY.md` add agent routes; **(1B)**
   `docs/ARCHITECTURE.md` note job layer; **(1A done)** `README.md` snapshot refresh. **(1B — no public behavior change in 1A)**
 - **Acceptance:** a chat job survives a process restart and is retrievable;
   duplicate idempotency returns the original; redaction verified. **(Phase 1A
-  proved the persistence layer; Phase 1C.2/1C.3 add startup recovery,
-  durable retry/cancellation coordination, and non-streaming chat execution.)**
+  proved the persistence layer; Phase 1C.2/1C.3/1C.4 add startup recovery,
+  durable retry/cancellation coordination, non-streaming chat execution, and
+  Deep Research markdown artifact execution.)**
 - **Risks:** `openai_compat.py` blast radius — implement job layer in a new
   module `chatgpt_api/api/agent_jobs.py` wired into the handler, not inlined
   into the 5.6k-line file (clear ownership boundary, tests green —
@@ -148,8 +151,8 @@
 10. Execution coordinator + restart recovery. **(Phase 1C.2 shipped for
     lifecycle/recovery/polling only; no provider execution in that phase)**
 11. Text execution adapter + non-streaming provider execution.
-    **(Phase 1C.3 complete for `chat` + `stream=false`; `deep_research` and
-    streaming execution remain deferred.)**
+    **(Phase 1C.4 complete for `chat` + `stream=false` and `deep_research`;
+    streaming execution remains deferred.)**
 12. Text-job submission UI.
 13. Image/multimodal execution.
 14. Image-related UI.

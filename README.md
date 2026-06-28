@@ -86,7 +86,7 @@ downloads, and developer tooling.
 | Image edit / composite | `POST /v1/images/edits` | implemented, one output image |
 | OCR / describe up to 10 images | `POST /v1/chatgpt/vision` | implemented |
 | Deep Research report export | `chatgpt-deep-research` model alias | implemented |
-| Durable Agent Jobs | `/v1/agent/jobs/*` | implemented for non-streaming `chat`; `deep_research` accepted but still deferred |
+| Durable Agent Jobs | `/v1/agent/jobs/*` | implemented for non-streaming `chat` and `deep_research` markdown artifacts |
 | File downloads | `GET/HEAD /v1/chatgpt/files/{id}/{filename}` | implemented |
 | Account usage and limits | `GET /v1/chatgpt/usage` | implemented when ChatGPT reports data |
 | opencode consumer config | `integrations/opencode/*` | implemented |
@@ -103,8 +103,8 @@ downloads, and developer tooling.
 
 ## Latest Validation Snapshot
 
-These checks were run locally on 2026-06-27 after the Phase 1C.3 Agent Job
-chat execution update (`chatgpt_api/api/text_execution.py`,
+These checks were run locally on 2026-06-28 after the Phase 1C.4 Agent Job
+Deep Research execution update (`chatgpt_api/api/research_execution.py`,
 `chatgpt_api/api/openai_compat.py`, `chatgpt_api/api/agent_job_coordinator.py`).
 Run on a **Windows** host; the single
 Python failure is the documented NTFS `0o600` platform mismatch
@@ -113,11 +113,12 @@ Python failure is the documented NTFS `0o600` platform mismatch
 | Check | Result |
 | --- | --- |
 | Python byte-compile: `python -m compileall chatgpt_api` | passed |
-| Python full test suite: `python -m pytest -q` | `371 passed, 1 known Windows 0o600 platform failure` |
+| Python full test suite: `python -m pytest -q` | `379 passed, 1 known Windows 0o600 platform failure` |
 | Agent Job persistence tests: `python -m pytest tests/test_agent_jobs.py -q` | `96 passed` |
-| Agent Job route tests: `python -m pytest tests/test_agent_job_routes.py -q` | `58 passed` |
-| Agent Job coordinator tests: `python -m pytest tests/test_agent_job_coordinator.py -q` | `22 passed` |
+| Agent Job route tests: `python -m pytest tests/test_agent_job_routes.py -q` | `61 passed` |
+| Agent Job coordinator tests: `python -m pytest tests/test_agent_job_coordinator.py -q` | `24 passed` |
 | Agent Job text execution tests: `python -m pytest tests/test_agent_job_text_execution.py -q` | `6 passed` |
+| Agent Job research execution tests: `python -m pytest tests/test_agent_job_research_execution.py -q` | `3 passed` |
 | Docker Compose config: `docker compose config --quiet` | passed |
 | Bridge Console / Character Game (`bun run check`/`build`/`test`) | not run on this host — `bun` unavailable; rerun on a host with `bun` before release |
 
@@ -602,7 +603,7 @@ required pieces are missing.
 | `GET /v1/models` | Models and bridge aliases visible to the current route. |
 | `GET /v1/chatgpt/usage` | Live per-account usage and quota metadata when ChatGPT reports it. |
 | `POST /v1/chat/completions` | Chat, streaming chat, tool-call bridge, chat-triggered images, and Deep Research. |
-| `POST /v1/agent/jobs` | Submit a durable Agent Job. Non-streaming `chat` jobs execute; `deep_research` jobs are accepted but remain deferred. |
+| `POST /v1/agent/jobs` | Submit a durable Agent Job. Non-streaming `chat` and `deep_research` jobs execute in the in-process coordinator. |
 | `GET /v1/agent/jobs` | List and filter durable Agent Jobs. |
 | `GET /v1/agent/jobs/{job_id}` | Inspect durable Agent Job status, attempts, timestamps, and error state. |
 | `GET /v1/agent/jobs/{job_id}/result` | Read the persisted final result. Queued/running jobs return `409 pending`. |
@@ -623,10 +624,10 @@ Agent Job details and limits: [docs/agent_bridge/API_CONTRACT.md](docs/agent_bri
 
 The Agent Job API is still local and unofficial. It uses the same shared
 Bearer key as the rest of the bridge, so there is no separate Agent API key
-or operator isolation yet. In Phase 1C.3, `type=chat` with `stream=false`
-executes durably and survives restart when the SQLite DB plus output files
-persist. `deep_research` jobs are accepted but not yet executed, and
-`stream=true` Agent Jobs are not yet supported by the executor.
+or operator isolation yet. In Phase 1C.4, `type=chat` with `stream=false`
+and `type=deep_research` execute durably and survive restart when the SQLite
+DB plus output files persist. `stream=true` Agent Jobs are not yet supported
+by the executor.
 
 ## Chat Example
 

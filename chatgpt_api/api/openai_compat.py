@@ -51,6 +51,11 @@ from chatgpt_api.api.prompts import (
     OPTIMIZED_TOOL_BRIDGE_PROMPT,
     TOOL_BRIDGE_PROMPT,
 )
+from chatgpt_api.api.research_execution import (
+    ResearchExecutionResult,
+    ResearchExecutionRuntime,
+    execute_deep_research,
+)
 from chatgpt_api.api.text_execution import (
     TextExecutionResult,
     TextExecutionRuntime,
@@ -558,6 +563,7 @@ def _create_chatgpt_operation(kind: str, operation_id: str | None = None) -> _Ch
 def _update_chatgpt_operation(operation_id: str | None, **updates: Any) -> _ChatGPTOperation | None:
     if not operation_id:
         return None
+    should_retry_stop = False
     with _CHATGPT_OPERATIONS_LOCK:
         operation = _CHATGPT_OPERATIONS.get(operation_id)
         if operation is None:
@@ -565,7 +571,17 @@ def _update_chatgpt_operation(operation_id: str | None, **updates: Any) -> _Chat
         for key, value in updates.items():
             if hasattr(operation, key):
                 setattr(operation, key, value)
-        return operation
+        should_retry_stop = bool(
+            operation.cancel_requested
+            and not operation.completed
+            and operation.kind == "research"
+            and operation.conversation_id
+            and operation.deep_research_message_id
+            and operation.deep_research_session_id
+        )
+    if should_retry_stop:
+        return _stop_chatgpt_operation_by_id(operation_id)
+    return operation
 
 
 def _finish_chatgpt_operation(operation_id: str | None) -> None:
@@ -642,6 +658,11 @@ def _cancel_chatgpt_operation(operation_id: str) -> tuple[int, dict[str, Any]]:
 def _stop_chatgpt_operation(operation: _ChatGPTOperation) -> _ChatGPTOperation:
     cancel_result: dict[str, Any] = {}
     cancel_errors: list[str] = []
+    with _CHATGPT_OPERATIONS_LOCK:
+        current = _CHATGPT_OPERATIONS.get(operation.operation_id)
+        if current is not None:
+            current.cancel_requested = True
+            operation = current
     provider = operation.provider
     if provider is None:
         cancel_result["pending"] = "provider_not_selected"
@@ -895,17 +916,38 @@ def _text_execution_runtime() -> TextExecutionRuntime:
     )
 
 
-def _build_agent_job_chat_executor(
+def _research_execution_runtime() -> ResearchExecutionRuntime:
+    return ResearchExecutionRuntime(
+        str_or_none=_str_or_none,
+        request_is_deep_research=_request_is_deep_research,
+        resolve_model_alias=_resolve_model_alias,
+        latest_user_message_text=_latest_user_message_text,
+        latest_message_role=_latest_message_role,
+        collect_deep_research_with_accounts=_collect_deep_research_with_accounts,
+        clean_deep_research_markdown=_clean_deep_research_markdown,
+        save_deep_research_report=_save_deep_research_report,
+        empty_response_error=_empty_response_error,
+        provider_error_factory=OpenAICompatProviderError,
+        finish_chatgpt_operation=_finish_chatgpt_operation,
+    )
+
+
+def _agent_job_operation_id(job_id: str) -> str:
+    return f"chatgptop_agent_{job_id}"
+
+
+def _build_agent_job_executor(
     config: OpenAICompatConfig,
     router: AccountRouter,
     coordinator: AgentJobCoordinator,
     repo: AgentJobRepository,
     output_root: Path,
 ):
-    runtime = _text_execution_runtime()
+    text_runtime = _text_execution_runtime()
+    research_runtime = _research_execution_runtime()
 
     def execute(job) -> None:
-        if job.request_type != "chat":
+        if job.request_type not in {"chat", "deep_research"}:
             return
         claim_now = utc_now()
         lease_owner = f"agent-job-worker:{uuid.uuid4().hex}"
@@ -969,34 +1011,115 @@ def _build_agent_job_chat_executor(
 
         try:
             request_body = load_request_json(output_root, job.job_id)
-            if request_body.get("type") != "chat":
+            if request_body.get("type") not in {"chat", "deep_research"}:
                 raise ValueError("unsupported agent job request type")
+            if request_body.get("type") != job.request_type:
+                raise ValueError("agent job request type mismatch")
             if request_body.get("stream") is True:
                 raise ValueError("stream=true agent jobs are not supported")
 
-            result: TextExecutionResult = asyncio.run(
-                execute_non_streaming_chat(
-                    config,
-                    request_body,
-                    router,
-                    runtime,
-                )
-            )
             latest = repo.get_job(job.job_id)
             if latest.status == "cancel_requested" or lease_lost.is_set():
                 finalize_cancelled()
                 return
-            response_storage_key = write_response_json(output_root, job.job_id, result.response)
-            repo.complete_job_with_result(
-                job.job_id,
-                result_type="text",
-                text_content=result.text,
-                response_storage_key=response_storage_key,
-                model=request_body.get("model") if isinstance(request_body.get("model"), str) else job.model,
-                account_alias=result.account,
-                finish_reason=result.finish_reason,
-                now=utc_now(),
+
+            if job.request_type == "chat":
+                result: TextExecutionResult = asyncio.run(
+                    execute_non_streaming_chat(
+                        config,
+                        request_body,
+                        router,
+                        text_runtime,
+                    )
+                )
+                latest = repo.get_job(job.job_id)
+                if latest.status == "cancel_requested" or lease_lost.is_set():
+                    finalize_cancelled()
+                    return
+                response_storage_key = write_response_json(output_root, job.job_id, result.response)
+                repo.complete_job_with_result(
+                    job.job_id,
+                    result_type="text",
+                    text_content=result.text,
+                    response_storage_key=response_storage_key,
+                    model=request_body.get("model") if isinstance(request_body.get("model"), str) else job.model,
+                    account_alias=result.account,
+                    finish_reason=result.finish_reason,
+                    now=utc_now(),
+                )
+                repo.finish_attempt(job.job_id, claim.attempt_no, status="succeeded", now=utc_now())
+                return
+
+            operation_id = _agent_job_operation_id(job.job_id)
+            _create_chatgpt_operation("research", operation_id)
+            latest = repo.get_job(job.job_id)
+            if latest.status == "cancel_requested" or lease_lost.is_set():
+                _stop_chatgpt_operation_by_id(operation_id)
+                finalize_cancelled()
+                return
+            research: ResearchExecutionResult | None = asyncio.run(
+                execute_deep_research(
+                    config,
+                    request_body,
+                    router,
+                    research_runtime,
+                    operation_id=operation_id,
+                )
             )
+            if research is None:
+                raise ValueError("unsupported agent job request type")
+            latest = repo.get_job(job.job_id)
+            if latest.status == "cancel_requested" or lease_lost.is_set():
+                finalize_cancelled()
+                return
+            report_asset = _register_download_file(
+                research.report_path,
+                content_type="text/markdown; charset=utf-8",
+                public_base_url=config.public_base_url,
+                admin_db_path=_admin_db_path(config),
+                kind="research",
+                account=research.account,
+                prompt=research.prompt,
+                metadata=research.metadata,
+                job_id=job.job_id,
+            )
+            registered_artifacts = repo.list_artifacts(job.job_id)
+            if not any(artifact.get("file_id") == report_asset.get("id") for artifact in registered_artifacts):
+                raise TextExecutionStorageError("could not persist research artifact metadata")
+            response = _completion_response(
+                research.requested_model,
+                _deep_research_done_message(research.report_path, str(report_asset["download_url"])),
+                [],
+                account=research.account,
+                extra={
+                    "chatgpt_operation_id": operation_id,
+                    "chatgpt_research_report_path": str(research.report_path),
+                    "chatgpt_research_report_download_url": report_asset["download_url"],
+                    "chatgpt_research_report_file": report_asset,
+                    "chatgpt_research": research.metadata,
+                },
+            )
+            response_storage_key = write_response_json(output_root, job.job_id, response)
+            try:
+                repo.complete_job_with_result(
+                    job.job_id,
+                    result_type="research",
+                    response_storage_key=response_storage_key,
+                    model=request_body.get("model") if isinstance(request_body.get("model"), str) else job.model,
+                    account_alias=research.account,
+                    finish_reason="stop",
+                    now=utc_now(),
+                )
+            except (InvalidTransition, JobNotFound):
+                try:
+                    _admin_store(config).delete_artifact(str(report_asset.get("id") or ""))
+                except Exception:
+                    pass
+                latest = repo.get_job(job.job_id)
+                if latest.status == "cancel_requested" or lease_lost.is_set():
+                    finalize_cancelled()
+                    return
+                raise
             repo.finish_attempt(job.job_id, claim.attempt_no, status="succeeded", now=utc_now())
             return
         except TextExecutionStorageError as exc:
@@ -1066,7 +1189,7 @@ def create_server(
     if coordinator is None:
         repo = AgentJobRepository(store)
         active_coordinator = AgentJobCoordinator(repo)
-        active_coordinator._executor = _build_agent_job_chat_executor(  # type: ignore[attr-defined]
+        active_coordinator._executor = _build_agent_job_executor(  # type: ignore[attr-defined]
             config,
             router,
             active_coordinator,
@@ -1949,49 +2072,39 @@ async def _maybe_handle_deep_research_request(
         request_metadata.get("chatgpt_operation_id")
     )
     operation = _create_chatgpt_operation("research", requested_operation_id)
-    try:
-        account, _, text, research_metadata = await _collect_deep_research_with_accounts(
-            config,
-            router,
-            latest,
-            requested_model,
-            model_slug,
-            operation_id=operation.operation_id,
-        )
-        if not text:
-            raise OpenAICompatProviderError(
-                _empty_response_error(),
-                requested_model,
-                model_slug,
-                account=account,
-            )
-        report_text = _clean_deep_research_markdown(text)
-        report_path = _save_deep_research_report(config, body, latest, report_text)
-        report_asset = _register_download_file(
-            report_path,
-            content_type="text/markdown; charset=utf-8",
-            public_base_url=config.public_base_url,
-            admin_db_path=config.admin_db_path,
-            kind="research",
-            account=account,
-            prompt=latest,
-            metadata=research_metadata,
-        )
-        return _completion_response(
-            requested_model,
-            _deep_research_done_message(report_path, str(report_asset["download_url"])),
-            [],
-            account=account,
-            extra={
-                "chatgpt_operation_id": operation.operation_id,
-                "chatgpt_research_report_path": str(report_path),
-                "chatgpt_research_report_download_url": report_asset["download_url"],
-                "chatgpt_research_report_file": report_asset,
-                "chatgpt_research": research_metadata,
-            },
-        )
-    finally:
-        _finish_chatgpt_operation(operation.operation_id)
+    result = await execute_deep_research(
+        config,
+        body,
+        router,
+        _research_execution_runtime(),
+        operation_id=operation.operation_id,
+        model_slug=model_slug,
+    )
+    if result is None:
+        return None
+    report_asset = _register_download_file(
+        result.report_path,
+        content_type="text/markdown; charset=utf-8",
+        public_base_url=config.public_base_url,
+        admin_db_path=config.admin_db_path,
+        kind="research",
+        account=result.account,
+        prompt=result.prompt,
+        metadata=result.metadata,
+    )
+    return _completion_response(
+        requested_model,
+        _deep_research_done_message(result.report_path, str(report_asset["download_url"])),
+        [],
+        account=result.account,
+        extra={
+            "chatgpt_operation_id": operation.operation_id,
+            "chatgpt_research_report_path": str(result.report_path),
+            "chatgpt_research_report_download_url": report_asset["download_url"],
+            "chatgpt_research_report_file": report_asset,
+            "chatgpt_research": result.metadata,
+        },
+    )
 
 
 def _image_request_with_operation_hooks(request: ImageRequest, operation_id: str | None) -> ImageRequest:
@@ -2317,6 +2430,7 @@ def _register_download_file(
     account: str | None = None,
     prompt: str | None = None,
     metadata: dict[str, Any] | None = None,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     resolved = path.expanduser().resolve()
     filename = resolved.name or "download"
@@ -2346,6 +2460,7 @@ def _register_download_file(
                 account=account,
                 prompt=prompt,
                 metadata=metadata,
+                job_id=job_id,
             )
         except Exception:
             pass
@@ -3112,6 +3227,12 @@ def _agent_route_service(config: OpenAICompatConfig) -> AgentJobRouteService:
     return AgentJobRouteService(repo, output_root)
 
 
+def _agent_job_cancel_callback(job: Any) -> None:
+    if getattr(job, "request_type", None) != "deep_research":
+        return
+    _stop_chatgpt_operation_by_id(_agent_job_operation_id(str(job.job_id)))
+
+
 def _agent_route_service_for_server(
     config: OpenAICompatConfig,
     server: Any | None,
@@ -3122,7 +3243,12 @@ def _agent_route_service_for_server(
         wake_callback = coordinator.wake
     repo = AgentJobRepository(_admin_store(config))
     output_root = _admin_db_path(config).parent / "agent-jobs"
-    return AgentJobRouteService(repo, output_root, wake_callback=wake_callback)
+    return AgentJobRouteService(
+        repo,
+        output_root,
+        wake_callback=wake_callback,
+        cancel_callback=_agent_job_cancel_callback,
+    )
 
 
 def _project_root() -> Path:

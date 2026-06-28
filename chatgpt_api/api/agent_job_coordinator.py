@@ -4,9 +4,9 @@ Owns startup recovery, bounded polling, durable retry promotion, non-running
 cancellation finalization, and the single-active-job execution boundary.
 
 Production servers install a real executor callback for eligible queued chat
-jobs. The coordinator still owns only lifecycle concerns: startup recovery,
-bounded polling, retry promotion, cancellation finalization, and the single
-active execution boundary.
+and deep_research jobs. The coordinator still owns only lifecycle concerns:
+startup recovery, bounded polling, retry promotion, cancellation
+finalization, and the single active execution boundary.
 """
 
 from __future__ import annotations
@@ -128,7 +128,7 @@ class AgentJobCoordinator:
         selected_job_id: str | None = None
         executor_invoked = False
         if self._executor is not None and not self._executor_active:
-            next_job = self._repo.get_next_queued_job(request_types=("chat",))
+            next_job = self._repo.get_next_queued_job(request_types=("chat", "deep_research"))
             if next_job is not None:
                 selected_job_id = next_job.job_id
                 LOGGER.info(

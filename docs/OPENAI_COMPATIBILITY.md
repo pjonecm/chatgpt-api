@@ -57,13 +57,13 @@ error envelope and auth, but are bridge-specific:
 POST /v1/agent/jobs                      submit a durable job (chat | deep_research)
 GET  /v1/agent/jobs                      list/filter/paginate jobs
 GET  /v1/agent/jobs/{job_id}             job status
-GET  /v1/agent/jobs/{job_id}/result      final result (chat results now execute for non-streaming jobs)
+GET  /v1/agent/jobs/{job_id}/result      final result (chat text or research artifact metadata)
 GET  /v1/agent/jobs/{job_id}/events      state-transition events (JSON only; no SSE)
 GET  /v1/agent/jobs/{job_id}/artifacts   artifacts associated with the job
 POST /v1/agent/jobs/{job_id}/cancel      persist a cancellation request
 ```
 
-Phase 1C.3 status (2026-06-27):
+Phase 1C.4 status (2026-06-28):
 
 - Only `chat` and `deep_research` submissions are accepted.
   `image_generation`, `image_edit`, and `vision` are rejected with
@@ -71,26 +71,33 @@ Phase 1C.3 status (2026-06-27):
 - A new job synchronously progresses `accepted → validating → queued` and
   its normalized request is persisted atomically to
   `outputs/agent-jobs/<job_id>/request.json`.
-- Non-streaming `chat` jobs are now executed by the in-process coordinator
-  using the same shared text-execution adapter as synchronous
-  `POST /v1/chat/completions`. The coordinator claims queued chat jobs,
-  renews a 60-second lease every 15 seconds during provider execution, and
-  persists both a durable `job_results` row and
+- Non-streaming `chat` jobs are executed by the in-process coordinator using
+  the same shared text-execution adapter as synchronous
+  `POST /v1/chat/completions`. Queued `deep_research` jobs are also executed
+  by the coordinator using the existing synchronous Deep Research provider
+  path, with the same account routing, usage preflight, research limiter,
+  normal-chat behavior, and operation tracking.
+- The coordinator claims one eligible queued `chat` or `deep_research` job at
+  a time, renews a 60-second lease every 15 seconds during provider execution,
+  and persists both a durable `job_results` row and
   `outputs/agent-jobs/<job_id>/results/response.json` on success.
 - `GET .../result` now returns the full normalized response loaded from the
-  persisted `response.json` file for successful text jobs. Queued/running
-  jobs still return `409 pending`.
-- `deep_research` jobs remain accepted and durable but are still deferred for
-  execution in a later phase, so they remain queued until that executor lands.
+  persisted `response.json` file for successful text jobs. For successful
+  research jobs it returns sanitized markdown artifact metadata instead of
+  inline report markdown. Queued/running jobs still return `409 pending`.
 - `stream=true` Agent Jobs are not supported by the current executor; Phase
-  1C.3 only executes `type=chat` with `stream=false`.
+  1C.4 only executes `type=chat` with `stream=false` and
+  `type=deep_research`.
 - Events are returned as JSON only (no `text/event-stream`).
 - Non-running cancellations (`accepted`, `validating`, `queued`,
   `retry_wait`) are finalized asynchronously to `cancelled` by the
-  coordinator without provider interaction. Running cancellation is currently
-  best-effort at the durable job-state level: the request is persisted, a
-  cancellation that wins prevents success result persistence, and the
-  underlying provider request is not yet reliably interrupted in flight.
+  coordinator without provider interaction. Running Deep Research
+  cancellation persists the durable cancel request and attempts the existing
+  ChatGPT operation stop path using deterministic operation id
+  `chatgptop_agent_<job_id>`. If the Deep Research widget identifiers are not
+  available yet, the in-memory operation remains marked `cancel_requested` and
+  retries the stop when identifiers arrive. In-memory operations still do not
+  survive process restart.
 - Idempotency: `Idempotency-Key` header takes precedence over
   `body.idempotency_key`; same key + same request → `200` (reused), same key
   + different request → `409 idempotency_conflict`.
