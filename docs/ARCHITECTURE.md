@@ -197,6 +197,11 @@ ownership boundaries that matter for open-source maintenance:
   `deep_research` Agent Jobs. It reuses the existing provider/account
   routing, usage preflight, research limiter, normal-chat behavior, operation
   tracking hooks, and final markdown report extraction without HTTP loopback.
+- `apps/bridge-console/src/lib/agent-jobs/*`: Phase 1D read-only Agent Job
+  monitor. It adds `#agent-jobs` and `#jobs/<job_id>` to the existing Svelte
+  console, consumes only shipped `/v1/agent/jobs*` endpoints, uses controlled
+  polling, and does not submit, cancel, retry, summarize queues/storage, or
+  change authentication.
 
 `openai_compat.py` is still intentionally the main facade while routes are
 stabilizing. Future splits should move one domain at a time:

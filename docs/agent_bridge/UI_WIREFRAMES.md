@@ -1,47 +1,47 @@
-# UI Wireframes — Agent Job Bridge Console
+﻿# UI Wireframes â€” Agent Job Bridge Console
 
 > Low-fidelity text/Mermaid wireframes to lock workflow, information
 > hierarchy, API requirements, states, actions, navigation. Not polished
 > assets. Extends `apps/bridge-console`.
 >
-> **Phase 1 UI scope update (2026-06-28):** implement only read-only
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 > monitoring with shipped endpoints (`#agent-jobs`, `#jobs/<job_id>`).
 > Submit Test, Queue, Storage, and Integration wireframes are future/reference
-> sketches and must not be treated as Phase 1 implementation targets.
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 
 ## Navigation shell
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│ [logo] Bridge Console        [base url▾] [key•]   [refresh]   │
-│ Overview | Agent Jobs | Accounts | Artifacts | Settings       │
-│ Future: Submit Test | Queue | Integration                     │
-├──────────────────────────────────────────────────────────────┤
-│                                                                │
-│                    < page content >                            │
-│                                                                │
-└──────────────────────────────────────────────────────────────┘
+â”Œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â”‚ Overview | Agent Jobs | Accounts | Artifacts | Settings       â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â”œâ”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”¤
+â”‚                                                                â”‚
+â”‚                    < page content >                            â”‚
+â”‚                                                                â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
-Hash-routed; nav collapses to a menu on tablet.
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 
 ## 1. Agent Jobs Dashboard
 
 ```text
-┌─ Agent Jobs ───────────────────────────────────────────────────┐
-│ Summary:  [Queued 3] [Running 1] [Retry 0] [Succeeded 42]      │
-│           [Failed 2] [Cancelled 1]  Oldest queued: 4m  Avg: 38s│
-│                                                                │
-│ Filters: [search____] [status▾] [type▾] [model▾] [account▾]    │
-│          [date range] [error_code▾]      [Apply] [Clear]       │
-│                                                                │
-│ ┌──Job──────┬ClientReq──┬Type──┬Status──┬Model──┬Acct──┬Att┬─ │
-│ │ job_01AB… │ run-123    │ chat │ Running │ auto  │ main │ 1 │ │
-│ │ job_01CD… │ camp-77-1  │ img  │ Succ.   │ gpt-… │ img  │ 1 │ │
-│ │ job_01EF… │ research42 │ res  │ Failed  │ deep… │ res  │ 3 │ │
-│ └─────────────────────────────────────────────────────────────┘ │
-│  ← 1 2 3 →    showing 1–50 of 142        [auto-refresh 5s ●]    │
-└────────────────────────────────────────────────────────────────┘
+â”Œâ”€ Agent Jobs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Summary:  [Queued 3] [Running 1] [Retry 0] [Succeeded 42]      â”‚
+â”‚           [Failed 2] [Cancelled 1]  Oldest queued: 4m  Avg: 38sâ”‚
+â”‚                                                                â”‚
+â”‚ Filters: [search____] [statusâ–¾] [typeâ–¾] [modelâ–¾] [accountâ–¾]    â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â”‚                                                                â”‚
+â”‚ â”Œâ”€â”€Jobâ”€â”€â”€â”€â”€â”€â”¬ClientReqâ”€â”€â”¬Typeâ”€â”€â”¬Statusâ”€â”€â”¬Modelâ”€â”€â”¬Acctâ”€â”€â”¬Attâ”¬â”€ â”‚
+â”‚ â”‚ job_01ABâ€¦ â”‚ run-123    â”‚ chat â”‚ Running â”‚ auto  â”‚ main â”‚ 1 â”‚ â”‚
+â”‚ â”‚ job_01CDâ€¦ â”‚ camp-77-1  â”‚ img  â”‚ Succ.   â”‚ gpt-â€¦ â”‚ img  â”‚ 1 â”‚ â”‚
+â”‚ â”‚ job_01EFâ€¦ â”‚ research42 â”‚ res  â”‚ Failed  â”‚ deepâ€¦ â”‚ res  â”‚ 3 â”‚ â”‚
+â”‚ â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜ â”‚
+â”‚  â† 1 2 3 â†’    showing 1â€“50 of 142        [auto-refresh 5s â—]    â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 States: loading skeleton; empty "No jobs yet"; error banner;
@@ -50,52 +50,51 @@ no-results "No jobs match filters"; API-unavailable "Bridge unreachable".
 ## 2. Submit Text Job (future, not Phase 1 UI)
 
 ```text
-┌─ Submit Test · Chat ───────────────────────────────────────────┐
-│ Mode: (•) Asynchronous job   ( ) Synchronous (test-lab)         │
-│ Model: [auto ▾]   Stream: [ ]                                  │
-│ System: [_____________________________________________]         │
-│ User:   [_____________________________________________]         │
-│         [_____________________________________________]         │
-│ Prior messages: (optional)  [+ add turn]                       │
-│ Client request id: [agent-run-123]                             │
-│ Idempotency key:   [agent-run-123-step-4]                      │
-│                                            [Reset] [Submit ▸]  │
-│ → on accept: "Submitted job_01…" [Open job →]                  │
-│ → on 409: "Idempotency key in use" [Open existing →]           │
-└────────────────────────────────────────────────────────────────┘
+â”Œâ”€ Submit Test Â· Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Mode: (â€¢) Asynchronous job   ( ) Synchronous (test-lab)         â”‚
+â”‚ Model: [auto â–¾]   Stream: [ ]                                  â”‚
+â”‚ System: [_____________________________________________]         â”‚
+â”‚ User:   [_____________________________________________]         â”‚
+â”‚         [_____________________________________________]         â”‚
+â”‚ Prior messages: (optional)  [+ add turn]                       â”‚
+â”‚ Client request id: [agent-run-123]                             â”‚
+â”‚ Idempotency key:   [agent-run-123-step-4]                      â”‚
+â”‚                                            [Reset] [Submit â–¸]  â”‚
+â”‚ â†’ on accept: "Submitted job_01â€¦" [Open job â†’]                  â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ## 3. Submit Image Job (future, not Phase 1 UI)
 
 ```text
-┌─ Submit Test · Image Generation ───────────────────────────────┐
-│ Model: [gpt-image-1 ▾]   Size: [1024x1024 ▾]                   │
-│ Prompt: [_____________________________________________]         │
-│ Client request id: [campaign-77-frame-1]                       │
-│ Idempotency key:   [campaign-77-frame-1-v1]                    │
-│                                            [Reset] [Submit ▸]  │
-└────────────────────────────────────────────────────────────────┘
+â”Œâ”€ Submit Test Â· Image Generation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Model: [gpt-image-1 â–¾]   Size: [1024x1024 â–¾]                   â”‚
+â”‚ Prompt: [_____________________________________________]         â”‚
+â”‚ Client request id: [campaign-77-frame-1]                       â”‚
+â”‚ Idempotency key:   [campaign-77-frame-1-v1]                    â”‚
+â”‚                                            [Reset] [Submit â–¸]  â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
-Vision upload variant: file picker + drag-drop, MIME/size validation inline
-("image/png · 1.2 MiB ✓"; "image/heic · unsupported"), up to 10.
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+("image/png Â· 1.2 MiB âœ“"; "image/heic Â· unsupported"), up to 10.
 
 ## 4. Job Detail
 
 ```text
-┌─ Job job_01AB…  [Running ●]  [Cancel] [Retry (P2)]────────────┐
-│ Type: chat   Model: auto   Account: main-free   Attempts: 1   │
-│ Client req: run-123   Idempotency: ag…123-step-4 (partial)    │
-│ Created 12:00 · Queued 12:00 · Started 12:01 · (running)      │
-│                                                                │
-│ ▸ Timeline  [created]→[queued]→[attempt_started]→[delta×12]…  │
-│ ▸ Attempts  #1 main-free · running                             │
-│ ▸ Request payload (redacted)   {model, messages, …}  [copy]   │
-│ ▸ Inputs   (none)                                              │
-│ ▸ Result   (pending… / or text + raw response [copy])         │
-│ ▸ Artifacts  [icon.png ▸ preview] [download]                  │
-│ ▸ Error    (none / redacted code + message)                   │
-└────────────────────────────────────────────────────────────────┘
+┌─ Job job_01AB...  [Running]  [Back] [Refresh]────────────┐
+â”‚ Client req: run-123   Idempotency: agâ€¦123-step-4 (partial)    â”‚
+â”‚ Created 12:00 Â· Queued 12:00 Â· Started 12:01 Â· (running)      â”‚
+â”‚                                                                â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â”‚ â–¸ Attempts  #1 main-free Â· running                             â”‚
+â”‚ â–¸ Request payload (redacted)   {model, messages, â€¦}  [copy]   â”‚
+â”‚ â–¸ Inputs   (none)                                              â”‚
+â”‚ â–¸ Result   (pendingâ€¦ / or text + raw response [copy])         â”‚
+â”‚ â–¸ Artifacts  [icon.png â–¸ preview] [download]                  â”‚
+â”‚ â–¸ Error    (none / redacted code + message)                   â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ```mermaid
@@ -104,61 +103,61 @@ flowchart LR
     D-->E{succeeded?}
     E-->|yes|F[succeeded]
     E-->|retryable|G[retry_wait]-->B
-    H[cancel requested]-->I[cancelled]
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 ```
 
 ## 5. Queue and Execution Status (future, not Phase 1 UI)
 
 ```text
-┌─ Queue & Execution ────────────────────────────────────────────┐
-│ Coordinator: in-process · pid 1234 · last heartbeat 2s ago     │
-│ [Queued 3] [Running 1] [Retry 0]  Oldest queued: 4m            │
-│ Active job: job_01AB… (chat, main-free)                        │
-│ Per-account concurrency: main-free 1/1 · image-pro 0/1         │
-│ Per-capacity: chat 1/1 · image 0/1 · research 0/1 · upload 0/1 │
-│ Waiting for capacity: 0                                        │
-│ Stale-running: 0      Restart recoveries today: 1              │
-│ Recent failures: job_01EF… (chatgpt_auth_or_browser_challenge) │
-│ Last success: 38s ago                                          │
-└────────────────────────────────────────────────────────────────┘
+â”Œâ”€ Queue & Execution â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Coordinator: in-process Â· pid 1234 Â· last heartbeat 2s ago     â”‚
+â”‚ [Queued 3] [Running 1] [Retry 0]  Oldest queued: 4m            â”‚
+â”‚ Active job: job_01ABâ€¦ (chat, main-free)                        â”‚
+â”‚ Per-account concurrency: main-free 1/1 Â· image-pro 0/1         â”‚
+â”‚ Per-capacity: chat 1/1 Â· image 0/1 Â· research 0/1 Â· upload 0/1 â”‚
+â”‚ Waiting for capacity: 0                                        â”‚
+â”‚ Stale-running: 0      Restart recoveries today: 1              â”‚
+â”‚ Recent failures: job_01EFâ€¦ (chatgpt_auth_or_browser_challenge) â”‚
+â”‚ Last success: 38s ago                                          â”‚
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
 ## 6. Storage and Artifact Status (future, not Phase 1 UI)
 
 ```text
-┌─ Storage & Artifacts ──────────────────────────────────────────┐
-│ Artifacts: 128 (image 96 · research 32)   Usage: ~1.4 GiB      │
-│ Input storage: 12 MiB   Result storage: 8 MiB                  │
-│ Expired (pending cleanup): 4   Missing files: 0   Orphans: 0   │
-│ Failed cleanups: 0   Last cleanup: 2026-06-27 03:00            │
-│ Retention: 7 days terminal    Reconciliation: ok (2m ago)      │
-│ [Run reconciliation now]  [Run cleanup now]                    │
-└────────────────────────────────────────────────────────────────┘
+â”Œâ”€ Storage & Artifacts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Artifacts: 128 (image 96 Â· research 32)   Usage: ~1.4 GiB      â”‚
+â”‚ Input storage: 12 MiB   Result storage: 8 MiB                  â”‚
+â”‚ Expired (pending cleanup): 4   Missing files: 0   Orphans: 0   â”‚
+â”‚ Failed cleanups: 0   Last cleanup: 2026-06-27 03:00            â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
-## 7. Integration Page
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 
 ```text
-┌─ Agent Integration ────────────────────────────────────────────┐
-│ Base URL:        http://<PRODUCTION_HOST>:8000/v1              │
-│ Auth header:     Authorization: Bearer <API_KEY>               │
-│ Submit job:      POST /v1/agent/jobs                           │
-│ List jobs:       GET  /v1/agent/jobs                           │
-│ Status:          GET  /v1/agent/jobs/{job_id}                  │
-│ Result:          GET  /v1/agent/jobs/{job_id}/result           │
-│ Cancel:          POST /v1/agent/jobs/{job_id}/cancel           │
-│ Events:          GET  /v1/agent/jobs/{job_id}/events           │
-│ Artifacts:       GET  /v1/agent/jobs/{job_id}/artifacts        │
-│                                                                │
-│ [curl example ▾]  [python client ▾]  [idempotency ▾]           │
-│ Limits: 25 MiB request · 20 MiB/image · 10 images              │
-│ Current Agent Jobs: chat, deep_research                        │
-│ Deferred: image_generation, image_edit, vision, multimodal     │
-│ Unsupported: masks, n>1, native tool-call API, token usage     │
-└────────────────────────────────────────────────────────────────┘
+â”Œâ”€ Agent Integration â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”
+â”‚ Base URL:        http://<PRODUCTION_HOST>:8000/v1              â”‚
+â”‚ Auth header:     Authorization: Bearer <API_KEY>               â”‚
+â”‚ Submit job:      POST /v1/agent/jobs                           â”‚
+â”‚ List jobs:       GET  /v1/agent/jobs                           â”‚
+â”‚ Status:          GET  /v1/agent/jobs/{job_id}                  â”‚
+â”‚ Result:          GET  /v1/agent/jobs/{job_id}/result           â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â”‚ Events:          GET  /v1/agent/jobs/{job_id}/events           â”‚
+â”‚ Artifacts:       GET  /v1/agent/jobs/{job_id}/artifacts        â”‚
+â”‚                                                                â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â”‚ Limits: 25 MiB request Â· 20 MiB/image Â· 10 images              â”‚
+â”‚ Current Agent Jobs: chat, deep_research                        â”‚
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
+â””â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”˜
 ```
 
-## Component tree (dashboard)
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 
 ```mermaid
 graph TD
@@ -171,17 +170,17 @@ graph TD
     Row --> TypeBadge[JobTypeBadge]
     Row --> Actions[view/cancel]
     Page --> Poll[PollingStatus]
-    Page -.-> Detail[JobDetail page]
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 ```
 
 ## State matrix (dashboard)
 
 | State | Trigger | Render |
 | --- | --- | --- |
-| loading | first fetch | skeleton rows |
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐
 | empty | 0 jobs total | "No jobs yet" |
 | no-results | filters match 0 | "No jobs match filters" + Clear |
 | error | fetch non-2xx | redacted banner + retry |
-| auth | 401 | "Unauthorized — check key in Settings" |
+| auth | 401 | "Unauthorized â€” check key in Settings" |
 | unavailable | network/timeout | "Bridge unreachable" + stale data |
-| partial | some endpoints fail | available data + degraded badge |
+┌─ Job job_01AB…  [Running]  [Back] [Refresh]────────────┐

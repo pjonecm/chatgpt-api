@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import AccountList from "./lib/AccountList.svelte";
+  import AgentJobDetailPage from "./lib/agent-jobs/AgentJobDetailPage.svelte";
+  import AgentJobsPage from "./lib/agent-jobs/AgentJobsPage.svelte";
   import ApiFieldGuide from "./lib/ApiFieldGuide.svelte";
   import Badge from "./lib/Badge.svelte";
   import CaptureResult from "./lib/CaptureResult.svelte";
@@ -657,6 +659,7 @@
 
   const pages = [
     ["overview", "Overview", "Run status, setup flow, live accounts"],
+    ["agent-jobs", "Agent Jobs", "Read-only durable job monitor"],
     ["accounts", "Accounts", "Paste captures, repair broken accounts"],
     ["test-lab", "Test Lab", "Chat, context, image, and research calls"],
     ["limits", "Limits", "Per-plan and per-account runtime throttles"],
@@ -667,6 +670,7 @@
   ] as const;
 
   let page = $state("overview");
+  let routeJobId = $state("");
   let busy = $state("");
   let toast = $state("");
   let toastTone = $state<"ok" | "bad">("ok");
@@ -742,7 +746,11 @@
   let concurrency = $state<Json>(cloneJson(DEFAULT_CONCURRENCY));
   let settingsResult = $state("");
 
-  const currentPage = $derived(pages.find(([id]) => id === page) ?? pages[0]);
+  const currentPage = $derived(
+    page === "job-detail"
+      ? (["job-detail", "Job Detail", "Inspect one durable Agent Job"] as const)
+      : (pages.find(([id]) => id === page) ?? pages[0]),
+  );
   const server = $derived((status?.server ?? {}) as Json);
   const routing = $derived((status?.routing ?? {}) as Json);
   const storage = $derived((status?.storage ?? {}) as Json);
@@ -856,11 +864,10 @@
     baseUrl =
       localStorage.getItem("chatgpt.console.baseUrl") || DEFAULT_BASE_URL;
     apiKey = localStorage.getItem("chatgpt.console.apiKey") ?? DEFAULT_API_KEY;
-    const hash = location.hash.replace("#", "");
-    if (pages.some(([id]) => id === hash)) page = hash;
+    applyHashRoute(location.hash.replace("#", ""));
     const onHashChange = () => {
       const next = location.hash.replace("#", "");
-      if (pages.some(([id]) => id === next)) page = next;
+      applyHashRoute(next);
     };
     const onToast = (event: Event) => {
       const message = (event as CustomEvent<string>).detail;
@@ -889,7 +896,26 @@
 
   function setPage(next: string) {
     page = next;
+    if (next !== "job-detail") routeJobId = "";
     location.hash = next;
+  }
+
+  function openAgentJob(jobId: string) {
+    routeJobId = jobId;
+    page = "job-detail";
+    location.hash = `jobs/${jobId}`;
+  }
+
+  function applyHashRoute(hash: string) {
+    if (hash.startsWith("jobs/")) {
+      routeJobId = hash.slice("jobs/".length);
+      page = "job-detail";
+      return;
+    }
+    if (pages.some(([id]) => id === hash)) {
+      page = hash;
+      routeJobId = "";
+    }
   }
 
   function apiUrl(path: string) {
@@ -2877,6 +2903,12 @@
         run: () => void refreshAll(),
       },
       {
+        id: "agent-jobs",
+        title: "Open Agent Jobs",
+        detail: "Monitor durable chat and Deep Research jobs.",
+        run: () => setPage("agent-jobs"),
+      },
+      {
         id: "accounts",
         title: "Check accounts",
         detail: "Call the account checker for every configured capture.",
@@ -3321,6 +3353,19 @@
             </article>
           </div>
         </section>
+      {:else if page === "agent-jobs"}
+        <AgentJobsPage
+          {baseUrl}
+          {apiKey}
+          onOpenJob={openAgentJob}
+        />
+      {:else if page === "job-detail"}
+        <AgentJobDetailPage
+          jobId={routeJobId}
+          {baseUrl}
+          {apiKey}
+          onBack={() => setPage("agent-jobs")}
+        />
       {:else if page === "accounts"}
         <section class="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_420px]">
           <article

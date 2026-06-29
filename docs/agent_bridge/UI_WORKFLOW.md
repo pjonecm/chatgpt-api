@@ -1,7 +1,7 @@
-# UI Workflow — Agent Job Bridge Console
+﻿# UI Workflow â€” Agent Job Bridge Console
 
 > Operator + integration-testing surface, **not** a consumer product. The UI
-> is **not** the security boundary — all authorization is backend-enforced.
+> is **not** the security boundary â€” all authorization is backend-enforced.
 > Extends `apps/bridge-console` (Svelte 5, hash-routed, `apiFetch`,
   Tailwind v4, `lucide-svelte`). No third frontend.
 >
@@ -20,15 +20,14 @@ diagnostics, and integration help.
 
 ## 2. User personas
 
-- **Operator** — monitors health, cancels stuck jobs, diagnoses failures.
-- **Integration tester** — uses later submission screens before wiring a real
+- **Operator** â€” monitors health, cancels stuck jobs, diagnoses failures.
+- **Integration tester** â€” uses later submission screens before wiring a real
   agent.
-- **Agent developer** — reads the integration page for endpoints/examples.
+- **Agent developer** â€” reads the integration page for endpoints/examples.
 
 ## 3. Primary workflows
 
-1. Monitor live jobs → drill into a failing job → read redacted error →
-   cancel or retry.
+1. Monitor live jobs -> drill into a failing job -> read redacted error.
 2. Diagnose job status, timeline, result, artifacts, and redacted failures.
 3. Submit test jobs, queue/storage diagnostics, and integration examples are
    future workflows.
@@ -38,13 +37,13 @@ diagnostics, and integration help.
 Extend the existing `pages` constant (`App.svelte ~658-667`) with:
 
 - `overview` (existing, extend with job summary card)
-- `agent-jobs` (**new**) — dashboard + table + filters
-- `submit-test` (**future**) — test submission forms (not Phase 1 UI)
+- `agent-jobs` (**new**) â€” dashboard + table + filters
+- `submit-test` (**future**) â€” test submission forms (not Phase 1 UI)
 - `job-detail` (**new**, hash `#jobs/<job_id>`)
-- `queue` (**future**) — execution + storage status
+- `queue` (**future**) â€” execution + storage status
 - `accounts` (existing, reuse)
 - `artifacts` (existing `storage`, extend with job-owned artifacts)
-- `integration` (**future**) — agent integration help (superset of `api-docs`)
+- `integration` (**future**) â€” agent integration help (superset of `api-docs`)
 - `settings` (existing)
 
 Navigation: top bar with the existing nav pattern; responsive collapse for
@@ -72,7 +71,7 @@ Phase 1 hash routes: `#agent-jobs`, `#jobs/<job_id>`. Future routes:
   account, date range, error_code.
 - **States:** loading, empty, error, no-results, partial, API-unavailable.
 - **Behavior:** default sort `-created_at`; cursor pagination; refresh
-  interval 5s (controlled, pauses when tab hidden); manual refresh; row →
+  interval 5s (controlled, pauses when tab hidden); manual refresh; row â†’
   `#jobs/<job_id>`; status badges; duration formatting; stale-job
   highlight; responsive table (horizontal scroll on narrow).
 
@@ -83,7 +82,7 @@ client_request_id, idempotency_key, sync/async toggle), image_generation
 (prompt, model, size, ids), vision (prompt, image upload, MIME/size
 validation, model, ids), image_edit (source image, prompt, aspect_ratio,
 ids), deep_research (messages, ids; long-running warning). For each:
-validation, accepted→navigate to detail, duplicate-idempotency 409 handling,
+validation, acceptedâ†’navigate to detail, duplicate-idempotency 409 handling,
 reset behavior. Clearly distinguish **synchronous** (existing test-lab) from
 **asynchronous** (agent job) submission.
 
@@ -118,7 +117,7 @@ unless those are selected.
 
 ### 6.6 Agent Integration Page (future, not Phase 1 UI)
 
-Base URL, auth header format (`Authorization: Bearer <API_KEY>` —
+Base URL, auth header format (`Authorization: Bearer <API_KEY>` â€”
 placeholder, never the real key), endpoints, example payloads, curl,
 Python client, idempotency behavior, error codes, file-size limits,
 supported/unsupported capabilities, sync-vs-async guidance.
@@ -133,27 +132,27 @@ check, recent failure category. No credentials.
 
 | Component | Purpose | Inputs | API dep | Reuse | Phase |
 | --- | --- | --- | --- | --- | --- |
-| `JobStatusBadge` | status pill (label+icon, not color-only) | status | — | `Badge.svelte` | 1 |
-| `JobTypeBadge` | request type | type | — | `Badge.svelte` | 1 |
+| `JobStatusBadge` | status pill (label+icon, not color-only) | status | â€” | `Badge.svelte` | 1 |
+| `JobTypeBadge` | request type | type | â€” | `Badge.svelte` | 1 |
 | `JobTable` | list rows | jobs[] | list endpoint | table pattern | 1 |
-| `JobFilters` | filter bar | filters | — | `Input` | 1 |
+| `JobFilters` | filter bar | filters | â€” | `Input` | 1 |
 | `JobSummaryCards` | counts derived from visible/listed jobs | jobs[] | list endpoint | `MetricGrid.svelte` | 1 |
-| `JobTimeline` | state transitions | events[] | events | — | 1 |
-| `JobAttemptList` | attempts | attempts[] | status | — | 1 |
-| `JobErrorPanel` | redacted error | error | — | `CaptureResult` | 1 |
+| `JobTimeline` | state transitions | events[] | events | â€” | 1 |
+| `JobAttemptList` | attempts | attempts[] | status | â€” | 1 |
+| `JobErrorPanel` | redacted error | error | â€” | `CaptureResult` | 1 |
 | `ArtifactPreview` | image/markdown preview | artifact | download | `ImageResult.svelte` | 1 |
-| `ArtifactList` | list | artifacts[] | artifacts endpoint | — | 1 |
+| `ArtifactList` | list | artifacts[] | artifacts endpoint | â€” | 1 |
 | `RequestPayloadViewer` | redacted JSON | request | status | `CodeBlock.svelte` | 1 |
 | `ResultViewer` | text/json/image/markdown | result | result endpoint | `CodeBlock`/`ImageResult` | 1 |
-| `AccountCapacityCard` | safe capacity | account | existing usage | — | 1 |
+| `AccountCapacityCard` | safe capacity | account | existing usage | â€” | 1 |
 | `QueueHealthPanel` | queue state | queue summary | future queue endpoint | `MetricGrid` | 3 |
 | `StorageSummary` | storage state | storage summary | future storage endpoint | `MetricGrid` | 3 |
-| `PollingStatus` | refresh indicator | — | — | — | 1 |
-| `CopyableCodeBlock` | copy examples | code | — | `CodeBlock.svelte` | 1 |
-| `SubmitChatJobForm` | chat form | — | submit endpoint | `Input`/`Textarea` | 2 |
-| `SubmitImageJobForm` | image gen form | — | submit endpoint | `Input` | 2 |
-| `SubmitVisionJobForm` | vision upload form | — | submit endpoint | `Input` | 2 |
-| `SubmitImageEditJobForm` | edit form | — | submit endpoint | `Input` | 2 |
+| `PollingStatus` | refresh indicator | â€” | â€” | â€” | 1 |
+| `CopyableCodeBlock` | copy examples | code | â€” | `CodeBlock.svelte` | 1 |
+| `SubmitChatJobForm` | chat form | â€” | submit endpoint | `Input`/`Textarea` | 2 |
+| `SubmitImageJobForm` | image gen form | â€” | submit endpoint | `Input` | 2 |
+| `SubmitVisionJobForm` | vision upload form | â€” | submit endpoint | `Input` | 2 |
+| `SubmitImageEditJobForm` | edit form | â€” | submit endpoint | `Input` | 2 |
 
 ## 8. API-to-screen mapping
 
@@ -165,7 +164,7 @@ check, recent failure category. No credentials.
 | Detail | timeline | `GET /v1/agent/jobs/{id}/events` | 3s poll | yes |
 | Detail | result | `GET /v1/agent/jobs/{id}/result` | on terminal | yes |
 | Detail | artifacts | `GET /v1/agent/jobs/{id}/artifacts` | on terminal | yes |
-| Detail | cancel | `POST /v1/agent/jobs/{id}/cancel` | one-shot | yes |
+| Detail | cancel | `POST /v1/agent/jobs/{id}/cancel` | one-shot | no in Phase 1D read-only UI |
 
 Future-only mappings: submission uses `POST /v1/agent/jobs`; queue/storage
 summary panels require backend endpoints that do not exist yet and must not
@@ -177,13 +176,13 @@ be consumed by the Phase 1 UI.
 | --- | --- | --- | --- | --- | --- | --- |
 | accepted | Accepted | neutral | clock | yes | no | view |
 | validating | Validating | neutral | spinner | yes | no | view |
-| queued | Queued | blue | hourglass | yes | no | view, cancel |
-| running | Running | amber | play | yes | no | view, cancel |
-| streaming | Streaming | amber | activity | yes | no | view, cancel |
-| retry_wait | Retry wait | amber | refresh-cw | yes | no | view, cancel |
+| queued | Queued | blue | hourglass | yes | no | view |
+| running | Running | amber | play | yes | no | view |
+| streaming | Streaming | amber | activity | yes | no | view |
+| retry_wait | Retry wait | amber | refresh-cw | yes | no | view |
 | cancel_requested | Cancel requested | purple | x-circle | yes | no | view |
-| succeeded | Succeeded | green | check | no | yes | view, retry |
-| failed | Failed | red | alert-octagon | no | yes | view, retry |
+| succeeded | Succeeded | green | check | no | yes | view |
+| failed | Failed | red | alert-octagon | no | yes | view |
 | cancelled | Cancelled | gray | ban | no | yes | view |
 | expired | Expired | gray | clock-expired | no | yes | view |
 
@@ -195,15 +194,15 @@ Each badge has a label + icon + supporting text (never color alone).
 - Empty: "No jobs yet" with guidance to submit through the API; no Phase 1
   submission CTA.
 - Error: redacted message + retry button.
-- Authorization failure: "Unauthorized — check API key in Settings."
+- Authorization failure: "Unauthorized â€” check API key in Settings."
 - Server unavailable: "Bridge unreachable" + last-known data.
 - Storage unavailable: storage panel shows "unavailable".
-- Job disappeared: 404 → "Job not found (expired or unknown)."
+- Job disappeared: 404 â†’ "Job not found (expired or unknown)."
 - Artifact missing: row shows "file missing" with reconcile action.
 - Cancel conflict: 409 toast.
 - Retry conflict: 409 toast.
-- Duplicate idempotency: 409 → link to existing job.
-- Polling backoff: exponential 3s→10s cap when terminal.
+- Duplicate idempotency: 409 â†’ link to existing job.
+- Polling backoff: exponential 3sâ†’10s cap when terminal.
 - SSE disconnect (Phase 3): fall back to polling.
 
 ## 11. Artifact behavior
@@ -229,15 +228,16 @@ Each badge has a label + icon + supporting text (never color alone).
 
 ## 14. Phase 1 vs future UI scope
 
-- Phase 1 UI: read-only monitoring (dashboard, table, detail, timeline,
-  result, artifacts, error, cancel action via shipped endpoint).
+- Phase 1D UI: read-only monitoring (dashboard, table, detail, timeline,
+  result, artifacts, error). No submission, cancellation, retry, queue
+  summary, storage summary, SSE, or auth changes are included.
 - Phase 2 UI: submission forms.
 - Phase 3 UI: queue/storage/integration and richer operational controls.
 - Phase 4 UI: client management (only after Phase 5 backend).
 
 ## 15. Acceptance criteria
 
-See task §23 — every Phase 1 screen maps to a proposed API contract; every
+See task Â§23 â€” every Phase 1 screen maps to a proposed API contract; every
 state has a visual; sensitive fields excluded; existing console reused; no
 UI assumes unsupported backend behavior; empty/loading/error states defined;
 accessibility + responsive defined; polling/SSE explicit.

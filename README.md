@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
 
 # ChatGPT Web Bridge
 
@@ -18,13 +18,13 @@ one local stack.
 
 <p>
   <a href="#quick-start-with-docker">Quick Start</a>
-  · <a href="#what-this-is">What It Does</a>
-  · <a href="#account-capture">Account Capture</a>
-  · <a href="#api-overview">API Routes</a>
-  · <a href="#image-generation">Images</a>
-  · <a href="#deep-research">Research</a>
-  · <a href="#opencode-integration">opencode</a>
-  · <a href="#documentation-index">Docs</a>
+  Â· <a href="#what-this-is">What It Does</a>
+  Â· <a href="#account-capture">Account Capture</a>
+  Â· <a href="#api-overview">API Routes</a>
+  Â· <a href="#image-generation">Images</a>
+  Â· <a href="#deep-research">Research</a>
+  Â· <a href="#opencode-integration">opencode</a>
+  Â· <a href="#documentation-index">Docs</a>
 </p>
 
 </div>
@@ -57,7 +57,7 @@ downloads, and developer tooling.
     <td><strong>Account Router</strong><br>Use one account or combine several accounts with failover, random, round-robin, weighted, or quota-aware routing.</td>
   </tr>
   <tr>
-    <td><strong>Operator Console</strong><br>Health, accounts, capacity, docs, storage, test lab, and opencode setup in a dedicated UI.</td>
+    <td><strong>Operator Console</strong><br>Health, accounts, capacity, Agent Job monitoring, docs, storage, test lab, and opencode setup in a dedicated UI.</td>
     <td><strong>Real Use Case</strong><br>A SvelteKit character/roleplay game shows how a normal web app can consume the bridge.</td>
   </tr>
   <tr>
@@ -103,12 +103,12 @@ downloads, and developer tooling.
 
 ## Latest Validation Snapshot
 
-These checks were run locally on 2026-06-28 after the Phase 1C.4 Agent Job
-Deep Research execution update (`chatgpt_api/api/research_execution.py`,
-`chatgpt_api/api/openai_compat.py`, `chatgpt_api/api/agent_job_coordinator.py`).
+These checks were run locally on 2026-06-29 after the Phase 1D read-only
+Agent Job monitoring UI update (`apps/bridge-console/src/lib/agent-jobs/*`,
+`apps/bridge-console/src/App.svelte`).
 Run on a **Windows** host; the single
 Python failure is the documented NTFS `0o600` platform mismatch
-(`CLAUDE.md` §17), not a code defect — on a Unix-like host it is 0 failures.
+(`CLAUDE.md` Â§17), not a code defect â€” on a Unix-like host it is 0 failures.
 
 | Check | Result |
 | --- | --- |
@@ -120,7 +120,8 @@ Python failure is the documented NTFS `0o600` platform mismatch
 | Agent Job text execution tests: `python -m pytest tests/test_agent_job_text_execution.py -q` | `6 passed` |
 | Agent Job research execution tests: `python -m pytest tests/test_agent_job_research_execution.py -q` | `3 passed` |
 | Docker Compose config: `docker compose config --quiet` | passed |
-| Bridge Console / Character Game (`bun run check`/`build`/`test`) | not run on this host — `bun` unavailable; rerun on a host with `bun` before release |
+| Bridge Console: `npm run check`, `npm run build` from `apps/bridge-console` | passed (`bun` was unavailable on this host; dependencies installed with npm without a package-lock) |
+| Character Game (`bun run check`/`test`/`build`) | not run for this UI-only bridge-console phase |
 
 Docker and live ChatGPT account/image/OCR/research proofs require a real local
 account capture and should be rerun on the target machine before publishing a
@@ -511,7 +512,7 @@ Account names must be ASCII slugs:
 
 ```text
 valid:   main-free, image-pro, free_2, team-pro
-invalid: บัญชีฟรี, pro main, pro/main
+invalid: à¸šà¸±à¸à¸Šà¸µà¸Ÿà¸£à¸µ, pro main, pro/main
 ```
 
 Do not commit:
@@ -1098,12 +1099,19 @@ It provides:
 
 - system health and API status
 - account list, add, update, verify, and delete flows
+- read-only Agent Job list and detail monitoring for shipped `chat` and
+  `deep_research` durable jobs
 - account-name validation
 - usage and capacity views
 - route documentation with request and response examples
 - test lab for chat, context, image, vision/OCR, and research
 - storage/library view for completed artifacts
 - opencode inject/eject/status controls
+
+The Agent Job monitor is read-only. It consumes the shipped
+`/v1/agent/jobs*` endpoints with controlled polling and does not add job
+submission, cancellation, retry, queue summary, storage summary, SSE, or new
+authentication.
 
 Run locally:
 
@@ -1571,7 +1579,7 @@ MIT. See [LICENSE](LICENSE).
   will be prompted for a passphrase at launch; it is held in memory for that
   process only and never written to disk or the environment. Use
   `CHATGPT_SECRETS_PASSPHRASE` instead if you need a non-interactive
-  (Docker/headless) equivalent — convenient, but weaker, since the passphrase
+  (Docker/headless) equivalent â€” convenient, but weaker, since the passphrase
   can end up in shell history, `.env` files, or process listings.
 - Switching between key modes (auto key file <-> passphrase) requires
   re-encrypting existing captures, since the old key can no longer be derived

@@ -145,11 +145,17 @@ questions quickly:
 - What model/image/research capacity is available?
 - How do I add, update, verify, or delete account captures?
 - How do I test chat, image, vision, research, and opencode routes?
+- What durable Agent Jobs exist, what state are they in, and what safe
+  result/artifact/error details are available?
 - Where are generated artifacts stored?
 - What exact curl or SDK-shaped request should an app send?
 
 The console should not become an app backend. It should call the Bridge API and
 render state. Account capture parsing and persistence belong in the Bridge API.
+The Agent Job monitor is intentionally read-only in Phase 1D: it lists and
+inspects jobs through shipped `/v1/agent/jobs*` endpoints with controlled
+polling, but does not expose submission, cancellation, retry, queue summary,
+storage summary, SSE, per-client keys, or role separation.
 
 ### Character Game
 
