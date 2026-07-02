@@ -1,8 +1,12 @@
 # AGENTS.md
 
 Operational guide for Codex sessions working in this repository.
-Grounded in the repository as of 2026-06-27. When code and this file disagree,
+Grounded in the repository as of 2026-06-30. When code and this file disagree,
 trust the code.
+
+Read this file completely before inspecting, modifying, testing, or
+documenting this repository. `CLAUDE.md` is kept only as a temporary
+compatibility pointer; this file is authoritative for Codex.
 
 ## 1. Project Overview
 
@@ -93,6 +97,9 @@ No `PROJECT.md`, `ROADMAP.md`, `CURRENT_STATE.md`, `ACTIVE_TASKS.md`, or
 | `docs/OPENCODE_AGENT_ROADMAP.md` | opencode integration contract and limits |
 | `README.md` | Public overview, quick start, validation snapshot |
 
+`AGENTS.md` governs agent/operator behavior. `CLAUDE.md` is not a separate
+source of truth; it only points back to this file.
+
 **Precedence for conflicts (highest → lowest):**
 1. Current executable code and configuration (`chatgpt_api/`, `Dockerfile`,
    `docker-compose.yml`, app manifests).
@@ -133,7 +140,7 @@ app directory.
 # Python (from repo root)
 python -m pip install -e '.[dev]'     # install editable + pytest
 python -m compileall chatgpt_api      # syntax/byte-compile check (no deps executed)
-python -m pytest -q                   # full Python suite (189 tests; see §17 re: Windows)
+python -m pytest -q                   # full Python suite; see §17 re: Windows caveat
 
 # Start the bridge API (both forms are equivalent; serve is the alias)
 python -m chatgpt_api serve --host 127.0.0.1 --port 8000
@@ -146,6 +153,11 @@ bun install
 bun run check        # svelte-check diagnostics
 bun run build        # production build to dist/
 bun run dev          # Vite dev server on 127.0.0.1:5174
+
+# Windows fallback for bridge-console only when Bun is unavailable, existing
+# node_modules is present, and no install or lockfile change is needed:
+npm.cmd --prefix apps/bridge-console run check
+npm.cmd --prefix apps/bridge-console run build
 
 # character-game (from apps/character-game)
 bun install
@@ -215,16 +227,24 @@ Do not claim security guarantees not enforced in code.
 
 ## 9. Implementation Workflow
 
-1. Read the relevant source-of-truth doc(s) from §5.
-2. Inspect the current implementation in `chatgpt_api/` (or the target app).
-3. Identify the active task and its acceptance criteria.
-4. Check architecture, API, schema, and auth/secrets implications.
-5. Implement the smallest coherent change; reuse existing patterns.
-6. Add or update tests under `tests/` (Python) or the app's spec files.
-7. Run the relevant validation from §14.
-8. Update affected docs (`docs/`, app READMEs) and, if the public behavior
+1. Read this `AGENTS.md` file and the relevant source-of-truth doc(s) from
+   §5.
+2. Inspect `git status --short` before editing so unrelated user changes are
+   visible and preserved.
+3. Inspect the current implementation in `chatgpt_api/` (or the target app).
+4. Identify the active task and its acceptance criteria.
+5. Check architecture, API, schema, and auth/secrets implications.
+6. Implement the smallest coherent change; reuse existing patterns and do not
+   edit unrelated dirty files.
+7. Add or update tests under `tests/` (Python) or the app's spec files when
+   behavior changes.
+8. Run the most targeted relevant validation from §14 first, then broaden
+   only when the change warrants it. Do not claim a check passed unless it was
+   run in this work session.
+9. Update affected docs (`docs/`, app READMEs) and, if the public behavior
    changed, the README validation snapshot date/claim.
-9. Report changed files, validation results, risks, and remaining work (§18).
+10. Do not stage, commit, push, or open a PR unless explicitly instructed.
+11. Report changed files, validation results, risks, and remaining work (§18).
 
 ## 10. Coding and Change Rules
 
@@ -232,6 +252,10 @@ Do not claim security guarantees not enforced in code.
   listed as "Remaining Technical Debt" unless that is the task.
 - No new dependency without justification; `pyproject.toml` is intentionally
   tiny.
+- Preserve package-manager conventions. Frontend projects are Bun-managed; use
+  `npm.cmd` for `apps/bridge-console` only as the documented Windows fallback
+  when Bun is unavailable and existing `node_modules` can run scripts without
+  install or lockfile changes.
 - No API contract change without reviewing `docs/OPENAI_COMPATIBILITY.md` and
   the route handler together.
 - No database/schema change without updating the inline `_migrate()` in
@@ -337,7 +361,7 @@ root; frontend commands from the app directory.
 | Schema / admin store | `python -m pytest tests/test_admin_store.py -q` |
 | Auth / secrets / capture | `python -m pytest tests/test_crypto.py tests/test_request_capture.py tests/test_chatgpt_auth.py -q` |
 | Routing / transport | `python -m pytest tests/test_chatgpt_transport.py tests/test_openai_compat.py -q` |
-| bridge-console UI | `bun run --cwd apps/bridge-console check && bun run --cwd apps/bridge-console build` |
+| bridge-console UI | `bun run --cwd apps/bridge-console check && bun run --cwd apps/bridge-console build` (Windows fallback when Bun is unavailable and no install is needed: `npm.cmd --prefix apps/bridge-console run check`, `npm.cmd --prefix apps/bridge-console run build`) |
 | character-game | `bun run --cwd apps/character-game check && bun run --cwd apps/character-game test && bun run --cwd apps/character-game build` |
 | Docker / deployment | `docker compose up --build`; then `curl -H 'Authorization: Bearer local-dev-key' http://127.0.0.1:8000/health` and `curl http://127.0.0.1:3000/api/status` |
 | Docs-only | no automated gate; re-read affected doc and grep for stale aliases |
@@ -413,9 +437,11 @@ Verified constraints; do not weaken them.
 - **Platform note (Windows):** `tests/test_crypto.py::
   test_load_secrets_key_creates_owner_only_key_file` asserts Unix `0o600` file
   permissions, which NTFS does not enforce. On Windows this test fails
-  (`438 == 0o666` vs expected `384 == 0o600`); the other 188 tests pass. The
-  README "189 passed" snapshot was recorded on a Unix-like system. This is a
-  test/platform mismatch, not a code defect.
+  (`438 == 0o666` vs expected `384 == 0o600`); recent Windows runs report the
+  rest of the suite passing (for example, 379 passed and 1 known
+  platform-specific failure). The README snapshot may be recorded on a
+  Unix-like system. This is a test/platform mismatch, not a code defect; do
+  not weaken the POSIX permission assertion to make Windows green.
 - **Captures expire** (~10 days, not guaranteed) and can be revoked by logging
   out of ChatGPT. The bridge cannot repair an expired capture locally.
 - **Hidden ChatGPT rate limits** apply beyond the local concurrency throttles;
@@ -440,4 +466,15 @@ When finishing a task, report:
 - **Unresolved issues** — including platform-specific skips and any check that
   could not run (e.g. no captured account available).
 - **Documentation updated** — which `docs/` / README sections changed.
+- **Commit status** — confirm no commit was made unless commit/push/PR work
+  was explicitly requested.
 - **Recommended next action** — one concrete follow-up.
+
+## 19. Nested AGENTS.md Policy
+
+Use only this root `AGENTS.md` unless a subdirectory develops genuinely
+different operational rules that are too specific for the root guide.
+
+Current major subdirectories (`chatgpt_api/`, `apps/bridge-console/`, and
+`tests/`) are covered by the root guidance and do not need nested instruction
+files.

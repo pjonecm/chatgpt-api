@@ -88,7 +88,7 @@ Deferred to Phase 2. Not accepted by the current shipped route service.
 }
 ```
 
-- `n` is fixed to 1 (existing bridge behavior, `CLAUDE.md` §12).
+- `n` is fixed to 1 (existing bridge behavior, `AGENTS.md` §12).
 - `size`/`aspect_ratio`: existing supported set.
 
 ### 1.3 Multimodal / vision job

@@ -4,7 +4,7 @@
 > data mutation was performed to produce this document.
 >
 > Verified against repository evidence on **2026-06-27**. When code and this
-> document disagree, trust the code (see `CLAUDE.md` §0).
+> document disagree, trust the code (see `AGENTS.md` §0).
 
 This document is a **project-specific** assessment. It distinguishes:
 
@@ -17,7 +17,7 @@ This document is a **project-specific** assessment. It distinguishes:
 It is written for a single operator taking the existing Docker Compose stack
 to a **private LAN / single-host** deployment. Public multi-tenant hosting is
 explicitly out of scope for this codebase (see `README.md` "Scope Tiers" and
-`CLAUDE.md` §1, §8, §17) and is **not** covered by the runbook as a supported
+`AGENTS.md` §1, §8, §17) and is **not** covered by the runbook as a supported
 target.
 
 ---
@@ -71,7 +71,7 @@ audit, and abuse controls is documented future work, **not** present code.
 
 | Source | Path | Read |
 | --- | --- | --- |
-| Operational guide | `CLAUDE.md` | yes |
+| Operational guide | `AGENTS.md` | yes |
 | Public overview | `README.md` | yes |
 | Python manifest | `pyproject.toml` | yes |
 | API image | `Dockerfile` | yes |
@@ -90,7 +90,7 @@ audit, and abuse controls is documented future work, **not** present code.
 | Game server routes | `apps/character-game/src/routes/api/*` | listing |
 | Source-of-truth docs | `docs/*.md` | index + DOCKER |
 
-**Confirmed absent** (per `CLAUDE.md` §4, verified by `ls`): no
+**Confirmed absent** (per `AGENTS.md` §4, verified by `ls`): no
 `PROJECT.md`, `ROADMAP.md`, `CURRENT_STATE.md`, `ACTIVE_TASKS.md`,
 `IMPLEMENT_LOG.md`, no `.github/` CI, no `scripts/` directory, no migration
 files, no separate `compose.yaml`/override files.
@@ -109,7 +109,7 @@ files, no separate `compose.yaml`/override files.
   captured browser requests to `https://chatgpt.com/backend-api/f/conversation`.
 - **Auth:** single optional shared Bearer token enforced by `authorize()` in
   `http_utils.py:11`. No key ⇒ all routes open (`return True`). **No RBAC, no
-  user accounts, no admin role** (`CLAUDE.md` §8 confirmed in code).
+  user accounts, no admin role** (`AGENTS.md` §8 confirmed in code).
 - **Database:** stdlib `sqlite3`, default `outputs/chatgpt-admin.sqlite`
   (Docker: `/data/outputs/chatgpt-admin.sqlite`). Schema defined inline in
   `BridgeAdminStore._migrate()` via `CREATE TABLE IF NOT EXISTS` —
@@ -146,12 +146,12 @@ files, no separate `compose.yaml`/override files.
 - Production hardening listed under `README.md` "Scope Tiers → Production
   TODO" (RBAC, tenant isolation, vaulting, durable queues, audit, abuse
   controls, observability, backup/restore automation) — **none present in
-  code**; this is intent, not implementation (`CLAUDE.md` §17).
+  code**; this is intent, not implementation (`AGENTS.md` §17).
 
 ### Legacy / development-only (must not be wired into runtime)
 
 - `references/legacy/OpenaiChat.py` — imports `zendriver` / `requests.curl_cffi`
-  not in current deps; not imported by the package (`CLAUDE.md` §17).
+  not in current deps; not imported by the package (`AGENTS.md` §17).
 - `CHATGAME_AI_MODE=mock` — UI-only dev mode; explicitly not the product path.
 - `chatgpt-api doctor` / `menu` interactive TTY commands — operator
   convenience, not production hardening.
@@ -194,7 +194,7 @@ Non-destructive only: no `docker compose up`, no image push, no DB reset.
 | # | Command | WD | Validates | Result | Meaning |
 | --- | --- | --- | --- | --- | --- |
 | 1 | `python -m compileall chatgpt_api` | repo root | Python syntax/byte-compile | **PASS** (exit 0) | Package compiles cleanly. |
-| 2 | `python -m pytest -q` | repo root | Python unit/integration suite | **PASS w/ 1 known-platform-fail** — 379 passed, 1 failed | Failure is `test_load_secrets_key_creates_owner_only_key_file` asserting Unix `0o600`; NTFS does not enforce it (`438 == 0o666` vs `384 == 0o600`). Documented in `CLAUDE.md` §17 and `README.md` snapshot. **Not a code defect.** |
+| 2 | `python -m pytest -q` | repo root | Python unit/integration suite | **PASS w/ 1 known-platform-fail** — 379 passed, 1 failed | Failure is `test_load_secrets_key_creates_owner_only_key_file` asserting Unix `0o600`; NTFS does not enforce it (`438 == 0o666` vs `384 == 0o600`). Documented in `AGENTS.md` §17 and `README.md` snapshot. **Not a code defect.** |
 | 3 | `docker compose -f docker-compose.yml config --quiet` | repo root | Compose syntax/resolution | **PASS** (exit 0) | Compose file valid; env interpolation resolves. |
 | 4 | `bun run --cwd apps/bridge-console check` / `build` | app dir | Console Svelte diagnostics + build | **NOT AVAILABLE** — `bun` not installed on this machine | Validated in `README.md` "Latest Validation Snapshot" dated 2026-06-26 (`0 errors, 0 warnings`, build passed). Re-run on deploy host before release. |
 | 5 | `bun run --cwd apps/character-game check` / `test` / `build` | app dir | Game Svelte diagnostics, vitest, build | **NOT AVAILABLE** — `bun` not installed | Validated in 2026-06-26 snapshot (`0 errors`, `6 tests passed`, build passed). Re-run on deploy host. |

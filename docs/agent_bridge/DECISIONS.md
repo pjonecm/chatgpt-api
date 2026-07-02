@@ -11,10 +11,10 @@ Status: Implemented
 
 ### Context
 
-The bridge is request/response oriented (`CLAUDE.md` §7). Agents/workflow
+The bridge is request/response oriented (`AGENTS.md` §7). Agents/workflow
 systems retry automatically and need durable, restart-safe, idempotent
 submission. The existing synchronous OpenAI-shaped routes must stay
-unchanged for compatibility (`docs/ARCHITECTURE.md`, `CLAUDE.md` §14).
+unchanged for compatibility (`docs/ARCHITECTURE.md`, `AGENTS.md` §14).
 
 ### Decision
 
@@ -48,8 +48,8 @@ Status: Implemented
 ### Context
 
 `BridgeAdminStore` already uses stdlib `sqlite3` with an inline idempotent
-`_migrate()` (`admin_store.py:27`), no migration framework (`CLAUDE.md`
-§11). The repo minimizes dependencies (`CLAUDE.md` §10).
+`_migrate()` (`admin_store.py:27`), no migration framework (`AGENTS.md`
+§11). The repo minimizes dependencies (`AGENTS.md` §10).
 
 ### Decision
 
@@ -153,7 +153,7 @@ process to reclaim stale `running` jobs.
 ### Alternatives Considered
 
 - Separate worker process / Redis queue: rejected for Phase 1 (no scale
-  need; `CLAUDE.md` §10).
+  need; `AGENTS.md` §10).
 
 ### Consequences
 
@@ -342,7 +342,7 @@ Status: Deferred
 ### Context
 
 Single shared key is the current reality; multi-tenant is out of scope
-(`CLAUDE.md` §8).
+(`AGENTS.md` §8).
 
 ### Decision
 

@@ -1,7 +1,7 @@
 # Project Context — AI Agent → ChatGPT API Bridge
 
 > Design/status context. Grounded in repository evidence on 2026-06-28.
-> When code and this document disagree, trust the code (`CLAUDE.md` §0).
+> When code and this document disagree, trust the code (`AGENTS.md` §0).
 > This is **not** the official OpenAI API. Use the wording "OpenAI-shaped" /
 > "Chat Completions-style".
 
@@ -18,7 +18,7 @@ UI remains deferred beyond the first read-only monitoring slice.
 
 ## 2. Problem statement
 
-The current bridge is **request/response oriented** (`CLAUDE.md` §7). Long
+The current bridge is **request/response oriented** (`AGENTS.md` §7). Long
 jobs (image generation, Deep Research) can run for minutes to ~90 minutes
 (`CHATGPT_WEB_TIMEOUT=5400`). Operation state is **in-memory only**
 (`_CHATGPT_OPERATIONS` dict, `openai_compat.py:190`) and is **lost on
@@ -80,7 +80,7 @@ and diagnostics. Later UI phases may add test submission. See `TARGET_ARCHITECTU
 - Not a hosted multi-tenant SaaS.
 - Not replacing the synchronous OpenAI-shaped routes.
 - Not redesigning the ChatGPT provider transport.
-- Not executing tools (the bridge never executes client tools — `CLAUDE.md`
+- Not executing tools (the bridge never executes client tools — `AGENTS.md`
   §7).
 - Not claiming security guarantees not enforced in code.
 
@@ -113,15 +113,15 @@ and diagnostics. Later UI phases may add test submission. See `TARGET_ARCHITECTU
 
 ## 11. Known constraints
 
-- Single shared Bearer key; no RBAC; no tenant isolation (`CLAUDE.md` §8).
+- Single shared Bearer key; no RBAC; no tenant isolation (`AGENTS.md` §8).
 - CORS `*` (`http_utils.py:34`).
 - Operation state in-memory, lost on restart.
-- Token usage returns zero placeholders (`CLAUDE.md` §12).
+- Token usage returns zero placeholders (`AGENTS.md` §12).
 - Captures expire ~10 days; not repairable locally.
 - `openai_compat.py` is ~5,580 lines, intentionally monolithic; no
-  speculative splits (`CLAUDE.md` §10, §17).
+  speculative splits (`AGENTS.md` §10, §17).
 - Windows `0o600` key-file permission is not enforced on NTFS
-  (`CLAUDE.md` §17).
+  (`AGENTS.md` §17).
 
 ## 12. Success criteria
 

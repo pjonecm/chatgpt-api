@@ -1,7 +1,7 @@
 # Implementation Roadmap — AI Agent → ChatGPT API Bridge
 
 > Phased plan. Backend + UI ordering prevents contract mismatch. No
-> implementation in this task. Grounded in `CLAUDE.md` §14 (validation) and
+> implementation in this task. Grounded in `AGENTS.md` §14 (validation) and
 > §15 (doc write-back).
 
 ## Phase 0 — Repository baseline (verify, don't change)
@@ -67,7 +67,7 @@
 - **Risks:** `openai_compat.py` blast radius — implement job layer in a new
   module `chatgpt_api/api/agent_jobs.py` wired into the handler, not inlined
   into the 5.6k-line file (clear ownership boundary, tests green —
-  `CLAUDE.md` §10 permits this). **(Shipped: repository, routes,
+  `AGENTS.md` §10 permits this). **(Shipped: repository, routes,
   coordinator, text execution, and Deep Research execution are wired through
   the facade; keep future work additive.)**
 - **Dependencies:** none new.

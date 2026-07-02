@@ -141,4 +141,4 @@ Add a component **only when** the matching trigger is met:
 
 Below these thresholds, SQLite + local files + in-process coordinator is the
 correct, dependency-light choice aligned with the repo's philosophy
-(`CLAUDE.md` §10 — no new dependency without justification).
+(`AGENTS.md` §10 — no new dependency without justification).

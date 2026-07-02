@@ -1,7 +1,7 @@
 # Security Model — AI Agent → ChatGPT API Bridge
 
 > States the **current security reality** honestly. Does not imply controls
-> that do not exist (`CLAUDE.md` §8, §16). No real credential is exposed
+> that do not exist (`AGENTS.md` §8, §16). No real credential is exposed
 > here.
 
 ## 1. Current security reality (verified)

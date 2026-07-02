@@ -1,7 +1,7 @@
 # Current System Assessment — AI Agent → ChatGPT API Bridge
 
 > Verified against code on 2026-06-27. File:line references are the evidence.
-> Trust the code over docs when they conflict (`CLAUDE.md` §0).
+> Trust the code over docs when they conflict (`AGENTS.md` §0).
 
 ## 1. Verified architecture
 
@@ -218,10 +218,10 @@ Per-path detail (verified):
 
 - `docs/ARCHITECTURE.md` "API Module Map" lists **future** splits
   (`routing.py`, `artifacts.py`, `admin_routes.py`, `tool_bridge.py`) as
-  planned, **not done** (`CLAUDE.md` §17 confirms). Do not assume they exist.
+  planned, **not done** (`AGENTS.md` §17 confirms). Do not assume they exist.
 - Dockerfile `ENV` hardcodes `CHATGPT_ACCOUNT=free`/`CHATGPT_ACCOUNTS=free`;
   Compose overrides to blank — bare-`docker run` caveat only.
 - `.env.example` legacy single-token vars (`CHATGPT_ACCESS_TOKEN`, etc.) are
   dev/diagnostic; the runtime capture flow is `secrets/accounts/<alias>/...`.
 - README "189 passed" snapshot was recorded on Unix; on Windows it is 188 + 1
-  platform failure (`CLAUDE.md` §17).
+  platform failure (`AGENTS.md` §17).

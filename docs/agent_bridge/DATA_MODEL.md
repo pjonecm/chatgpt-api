@@ -20,7 +20,7 @@
 >
 > Implemented as idempotent `CREATE TABLE IF NOT EXISTS` in
 > `BridgeAdminStore._migrate()` (`admin_store.py`) — no migration framework
-> exists (`CLAUDE.md` §11). Forward-only; **no down-migration**.
+> exists (`AGENTS.md` §11). Forward-only; **no down-migration**.
 
 ## Migration strategy
 
@@ -32,7 +32,7 @@
   `/v1/chatgpt/files/{file_id}/{filename}` works unchanged. Add a
   `job_id` column to `artifacts` (nullable, default NULL) to associate
   artifacts with jobs without breaking existing rows.
-- All queries parameterized (`?` placeholders) — keep `CLAUDE.md` §11.
+- All queries parameterized (`?` placeholders) — keep `AGENTS.md` §11.
 - Each store call opens its own connection (existing pattern); no pooling.
 
 ## 1. `agent_jobs` (Phase 1)

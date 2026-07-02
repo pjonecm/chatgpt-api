@@ -15,6 +15,8 @@
   import Textarea from "./lib/Textarea.svelte";
 
   const DEFAULT_API_KEY = "local-dev-key";
+  const API_KEY_PLACEHOLDER = "<API_KEY>";
+  const API_KEY_MASK = "********";
   const DEFAULT_BASE_URL = "http://127.0.0.1:8000/v1";
   const LOCAL_API_HOST = "127.0.0.1";
   const LOCAL_API_PORT = "8000";
@@ -794,7 +796,7 @@
   );
   const serveCommand = $derived(buildServeCommand());
   const opencodeQuickCommand = $derived(
-    `bun integrations/opencode/opencode-config.mjs --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+    `bun integrations/opencode/opencode-config.mjs --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
   );
   const consoleCommand = $derived("bun --cwd apps/bridge-console dev");
   const consoleLanCommand = $derived("bun --cwd apps/bridge-console dev:lan");
@@ -802,7 +804,7 @@
   const opencodeLanCurl = $derived(
     curl("POST", "/chatgpt/admin/opencode/inject", {
       base_url: baseUrl,
-      api_key: apiKey || DEFAULT_API_KEY,
+      api_key: API_KEY_PLACEHOLDER,
       model: opencodeModel || "chatgpt-web/auto@optimized",
     }),
   );
@@ -1551,7 +1553,7 @@
 
   function curl(method: string, path: string, body?: unknown) {
     const target = apiUrl(path);
-    const headers = [`Authorization: Bearer ${apiKey || DEFAULT_API_KEY}`];
+    const headers = [`Authorization: Bearer ${API_KEY_PLACEHOLDER}`];
     if (body !== undefined) headers.push("Content-Type: application/json");
     const lines = [
       `curl -sS -X ${method} ${quoteShell(target)} \\`,
@@ -1755,7 +1757,7 @@
         note: "Writes opencode provider config from the current API target.",
         code: curl("POST", "/chatgpt/admin/opencode/inject", {
           base_url: baseUrl,
-          api_key: apiKey || DEFAULT_API_KEY,
+          api_key: API_KEY_PLACEHOLDER,
           model: "chatgpt-web/auto@optimized",
         }),
       },
@@ -1768,35 +1770,35 @@
         title: "Check running server",
         note: "Use this first inside Docker, SSH, or a headless box.",
         code: shell(
-          `python3 -m chatgpt_api admin status --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api admin status --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
         title: "List live usage",
         note: "Fetches the same usage table as /chatgpt:usage without opening the web console.",
         code: shell(
-          `python3 -m chatgpt_api admin usage --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api admin usage --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
         title: "API health from CLI",
         note: "Read-only consumer check. This goes through the same /v1 server target as apps.",
         code: shell(
-          `python3 -m chatgpt_api api health --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api api health --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
         title: "API chat with routing",
         note: "Tests the real app route with per-request accounts and strategy overrides.",
         code: shell(
-          `python3 -m chatgpt_api api chat --message 'Reply with exactly: bridge ok' --account-strategy random --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api api chat --message 'Reply with exactly: bridge ok' --account-strategy random --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
         title: "API image generation",
         note: "Calls /v1/images/generations and saves only completed image artifacts.",
         code: shell(
-          `python3 -m chatgpt_api api image --prompt 'small blue app icon, no text' --output-dir ./outputs/manual-images --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api api image --prompt 'small blue app icon, no text' --output-dir ./outputs/manual-images --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
@@ -1804,9 +1806,9 @@
         note: "Start with a known operation id, poll until deep_research_ready=yes, then cancel from another terminal if needed.",
         code: shell(
           [
-            `python3 -m chatgpt_api api research --prompt 'Briefly research whether LLMs could reach AGI.' --operation-id chatgptop_research_demo --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
-            `python3 -m chatgpt_api api operation --operation-id chatgptop_research_demo --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
-            `python3 -m chatgpt_api api cancel --operation-id chatgptop_research_demo --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+            `python3 -m chatgpt_api api research --prompt 'Briefly research whether LLMs could reach AGI.' --operation-id chatgptop_research_demo --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
+            `python3 -m chatgpt_api api operation --operation-id chatgptop_research_demo --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
+            `python3 -m chatgpt_api api cancel --operation-id chatgptop_research_demo --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
           ].join("\n"),
         ),
       },
@@ -1814,21 +1816,21 @@
         title: "Set runtime limits",
         note: "Persists per-plan/per-account throttles into the admin SQLite DB.",
         code: shell(
-          `python3 -m chatgpt_api admin set-limits --chat free=1,go=2,plus=3,pro=4 --upload free=1,go=1,plus=1,pro=1 --image free=1,go=1,plus=2,pro=3 --research free=1,go=1,plus=2,pro=2 --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api admin set-limits --chat free=1,go=2,plus=3,pro=4 --upload free=1,go=1,plus=1,pro=1 --image free=1,go=1,plus=2,pro=3 --research free=1,go=1,plus=2,pro=2 --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
         title: "Save account capture",
         note: "Fails before writing if the copied request is incomplete. Use it to refresh an expired account capture safely.",
         code: shell(
-          `python3 -m chatgpt_api admin account add --account main-free --capture-file ./chatgpt-request.txt --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api admin account add --account main-free --capture-file ./chatgpt-request.txt --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
         title: "Inject opencode",
         note: "Only writes opencode consumer config. It does not configure accounts, ports, or quotas.",
         code: shell(
-          `python3 -m chatgpt_api admin opencode inject --model chatgpt-web/auto@optimized --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(apiKey || DEFAULT_API_KEY)}`,
+          `python3 -m chatgpt_api admin opencode inject --model chatgpt-web/auto@optimized --base-url ${quoteShell(baseUrl)} --api-key ${quoteShell(API_KEY_PLACEHOLDER)}`,
         ),
       },
       {
@@ -1836,7 +1838,7 @@
         note: "Use environment variables for container entrypoints and mounted volumes.",
         code: shell(
           [
-            `CHATGPT_API_KEY=${quoteShell(apiKey || DEFAULT_API_KEY)} \\`,
+            `CHATGPT_API_KEY=${quoteShell(API_KEY_PLACEHOLDER)} \\`,
             ...(serverAccounts.trim() ? [`CHATGPT_ACCOUNTS=${quoteShell(serverAccounts)} \\`] : []),
             `CHATGPT_API_HOST=0.0.0.0 \\`,
             `CHATGPT_API_PORT=${quoteShell(serverPort)} \\`,
@@ -2415,7 +2417,7 @@
       "--port",
       quoteShell(serverPort),
       "--api-key",
-      quoteShell(serverKey),
+      quoteShell(API_KEY_PLACEHOLDER),
       "--public-base-url",
       quoteShell(serverPublicBase),
       "--image-output-dir",
@@ -2456,6 +2458,10 @@
 
   function quoteShell(value: string) {
     return `'${String(value).replaceAll("'", "'\\''")}'`;
+  }
+
+  function maskedCredential(value: string) {
+    return value ? API_KEY_MASK : "Not configured";
   }
 
   function featureText(feature: Json | undefined) {
@@ -2944,7 +2950,7 @@
             name: "ChatGPT Web Bridge",
             options: {
               baseURL: baseUrl,
-              apiKey: apiKey || DEFAULT_API_KEY,
+              apiKey: API_KEY_PLACEHOLDER,
             },
             models: {
               "chatgpt-web/auto@optimized": {
@@ -2983,7 +2989,7 @@
         </div>
         <div class="api-meta">
           <code>{lastError || baseUrl}</code>
-          <code>{apiKey || DEFAULT_API_KEY}</code>
+          <code>{maskedCredential(apiKey)}</code>
         </div>
       </div>
     </div>
@@ -3096,8 +3102,8 @@
                   <code>{baseUrl}</code>
                 </div>
                 <div>
-                  <span>Dev key</span>
-                  <code>{apiKey || DEFAULT_API_KEY}</code>
+                  <span>API key</span>
+                  <code>{maskedCredential(apiKey)}</code>
                 </div>
               </div>
 
@@ -3803,7 +3809,7 @@
               title="How this bridge is meant to be used"
             />
             <div class="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-              {#each [["Base URL", baseUrl, "Every route below is relative to this /v1 URL."], ["Auth", apiKey ? "Bearer key required" : "No auth", "Default dev key is local-dev-key."], ["Not a full clone", "Bridge-style API", "Close to chat completions, with ChatGPT Web specific behavior."], ["Files", "Download route", "Images/reports get local paths and HTTP download links."]] as item (item[0])}
+              {#each [["Base URL", baseUrl, "Every route below is relative to this /v1 URL."], ["Auth", apiKey ? "Bearer key configured" : "No auth", "The configured key is stored locally and hidden from rendered snippets."], ["Not a full clone", "Bridge-style API", "Close to chat completions, with ChatGPT Web specific behavior."], ["Files", "Download route", "Images/reports get local paths and HTTP download links."]] as item (item[0])}
                 <div
                   class="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                 >
@@ -4335,7 +4341,8 @@
               start the API server or change ChatGPT accounts.
             </p>
             <Input label="Bridge API base URL" bind:value={baseUrl} />
-            <Input label="Bearer key" bind:value={apiKey} />
+            <Input label="Bearer key" bind:value={apiKey} type="password" placeholder={API_KEY_PLACEHOLDER} />
+            <p class="mt-2 text-xs text-slate-500">Status: {maskedCredential(apiKey)}</p>
             <div class="mt-4 flex flex-wrap gap-2">
               <button
                 class="rounded-2xl bg-sky-300 px-4 py-3 font-black text-slate-950"
@@ -4594,7 +4601,7 @@
               </div>
 
               <div class="grid gap-3 lg:grid-cols-2">
-                <Input label="API key" bind:value={serverKey} />
+                <Input label="API key" bind:value={serverKey} type="password" placeholder={API_KEY_PLACEHOLDER} />
                 <Input label="Public base URL" bind:value={serverPublicBase} />
               </div>
               <div class="rounded-3xl border border-white/10 bg-black/20 p-4">

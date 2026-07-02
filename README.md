@@ -108,7 +108,7 @@ Agent Job monitoring UI update (`apps/bridge-console/src/lib/agent-jobs/*`,
 `apps/bridge-console/src/App.svelte`).
 Run on a **Windows** host; the single
 Python failure is the documented NTFS `0o600` platform mismatch
-(`CLAUDE.md` Â§17), not a code defect â€” on a Unix-like host it is 0 failures.
+(`AGENTS.md` Â§17), not a code defect â€” on a Unix-like host it is 0 failures.
 
 | Check | Result |
 | --- | --- |
